@@ -179,3 +179,11 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Node / frontend (Vite + React)
+node_modules/
+frontend/dist/
+
+# Local SQLite dev database (backend falls back to this when DATABASE_URL
+# isn't set)
+backend/*.db

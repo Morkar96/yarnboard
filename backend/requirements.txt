@@ -1,0 +1,11 @@
+Flask==3.0.3
+Flask-SQLAlchemy==3.1.1
+Flask-Bcrypt==1.0.1
+Flask-Cors==4.0.1
+requests==2.32.3
+beautifulsoup4==4.12.3
+python-dotenv==1.0.1
+
+# Production server + Neon (Postgres) driver.
+gunicorn==22.0.0
+psycopg2-binary==2.9.12
