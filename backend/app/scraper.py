@@ -25,6 +25,13 @@ USER_AGENT = (
 REQUEST_TIMEOUT_SECONDS = 10
 
 HEADING_TAGS = ["h1", "h2", "h3", "h4", "strong", "b"]
+# Section searches (materials/abbreviations/instructions) deliberately
+# exclude h1: that's reserved for the page/pattern title elsewhere
+# (_extract_title), and titles routinely contain words like "pattern"
+# (e.g. "Cozy Beanie Pattern"), which would otherwise false-match
+# INSTRUCTIONS_KEYWORDS and anchor extraction on the title instead of the
+# real instructions heading.
+SECTION_HEADING_TAGS = ["h2", "h3", "h4", "strong", "b"]
 
 MATERIALS_KEYWORDS = ["materials", "you will need", "you'll need", "ingredients", "supplies"]
 ABBREVIATIONS_KEYWORDS = ["abbreviation", "abbrev", "glossary", "terms"]
@@ -144,11 +151,12 @@ def _extract_author(soup: BeautifulSoup) -> str | None:
 
 def _find_section_by_heading(soup: BeautifulSoup, keywords: list[str]):
     """
-    Return the first heading-like tag (h1-h4, strong, b) whose text
-    contains one of `keywords` (case-insensitive), or None. The caller
-    walks the tag's following siblings to collect the section's content.
+    Return the first heading-like tag (h2-h4, strong, b -- not h1, which is
+    the page title, see SECTION_HEADING_TAGS) whose text contains one of
+    `keywords` (case-insensitive), or None. The caller walks the tag's
+    following siblings to collect the section's content.
     """
-    for tag in soup.find_all(HEADING_TAGS):
+    for tag in soup.find_all(SECTION_HEADING_TAGS):
         text = tag.get_text(strip=True).lower()
         if any(keyword in text for keyword in keywords):
             return tag

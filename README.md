@@ -1,7 +1,103 @@
-# yarnboard
-a dashboard of all the knitting and crochet instructions you have all over different websites
-Prompt:
-    Web app based on render's server, neon database - python as backend, react ts as frontend.
-    the app will take a webpage (entered by user) with instructions for either crochet or knitting and make a page made from the instructions, materials, abbreviations. the instructions will show as a to do list for each part so the user can follow it while crocheting/knitting. the web app will save each entry of instructions from a webpage and will make sure they don't repeat on currently saved instructions. 
-    each user will have his own account which will save the instructions he uploaded, show a message that this web app is publishing each upload. make sure there is a different page for self uploaded and user-saved instructions, and another for community uploads.
-    MAKE SURE - each instructions uploaded by a user - will show who uploaded it and who made the inctructions by the webpage it was uploded from.
+# Yarnboard
+
+A dashboard for all the knitting and crochet instructions scattered across
+different websites. Paste a link to a pattern page, and Yarnboard pulls out
+the materials, abbreviations, and step-by-step instructions into a
+checklist you can follow while you craft -- then saves it to a shared
+community library (deduplicated by source URL) so nobody has to scrape the
+same pattern twice.
+
+Every pattern always shows **who uploaded it to Yarnboard** and **who
+originally designed it** (with a link back to the source page), and
+uploading always publishes to the whole community -- users are told this
+clearly before they publish.
+
+## Architecture
+
+```
+[Browser] --fetch(credentials:include)--> [React + TS static site, Vite build, on Render]
+                                                        |
+                                                        v
+                                    [Flask API on Render] <--psycopg2--> [Neon Postgres]
+```
+
+- **Backend** (`backend/`): Flask, split into a small app-factory package
+  (`app/`) with two blueprints -- `auth` (accounts, session cookies) and
+  `patterns` (scrape-preview, publish, the three pattern list views,
+  per-user checklist progress). See `backend/app/*.py` module docstrings
+  for what each file is responsible for.
+- **Scraper** (`backend/app/scraper.py`): best-effort heuristic extraction
+  (requests + BeautifulSoup) based on heading keywords and list markup.
+  There's no universal format for pattern pages across the web, so the
+  scraper's output is always shown to the user as an **editable draft**
+  before anything is saved -- never assume it's 100% correct.
+- **Per-user checklist progress**: a pattern's instructions are shared by
+  everyone (one row in the `pattern` table), but checking off a step is
+  personal -- tracked in a separate `user_pattern_progress` table so one
+  person's progress never shows up as completed for anyone else viewing
+  the same community pattern.
+- **Frontend** (`frontend/`): Vite + React + TypeScript, React Router,
+  a typed API client (`src/api/client.ts`), and a single `AuthContext` for
+  the logged-in user. No larger state library -- the app is small enough
+  that page-local `useState` plus one context is sufficient.
+- **Auth**: server-side session cookies (Flask's signed session) plus
+  bcrypt password hashing. In production, the frontend and backend are two
+  separate Render services on different subdomains, so the session cookie
+  is set with `SameSite=None; Secure` (see `backend/app/config.py`) and
+  CORS is locked to an explicit origin allowlist.
+
+## Local setup
+
+### Backend
+
+```bash
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env        # leave DATABASE_URL unset to use local SQLite
+flask --app wsgi init-db    # creates the tables
+flask --app wsgi run --port 5001
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local  # points at the local backend by default
+npm run dev                 # http://localhost:5173
+```
+
+Register an account, then use "Submit a Pattern" to try it against a real
+pattern page. The scraper is heuristic -- if a page doesn't extract
+cleanly, the review screen lets you fill in materials/abbreviations/steps
+by hand before publishing.
+
+## Deploying to Render
+
+1. Create a Postgres database at [neon.tech](https://neon.tech) and copy
+   its connection string.
+2. In the Render dashboard, create a new **Blueprint** from this repo --
+   Render will read `render.yaml` and create both services
+   (`yarnboard-backend`, `yarnboard-frontend`).
+3. On the backend service, set the env vars marked `sync: false` in
+   `render.yaml`: `SECRET_KEY` (any long random string) and `DATABASE_URL`
+   (the Neon connection string from step 1).
+4. Once both services are live, double check `CORS_ORIGINS` on the backend
+   and `VITE_API_BASE_URL` on the frontend actually match each other's
+   deployed URLs (Render assigns the final URLs on first deploy, and
+   `render.yaml`'s defaults may need a one-time update in the dashboard).
+5. Run the schema against the Neon database once:
+   `DATABASE_URL=<neon-connection-string> flask --app wsgi init-db`
+   (run this locally, pointed at the production database, since there's no
+   migration tool in v1 -- see Known limitations).
+
+## Known limitations
+
+- The scraper is heuristic and best-effort; it's designed to feed a human
+  review step, not to be a guaranteed-correct parser for every pattern site.
+- No email verification on signup.
+- Patterns are immutable after publishing -- there's no edit flow yet, only
+  submit-and-review before that first publish.
+- No migration tool (Alembic, etc.) -- schema setup is a one-off
+  `flask init-db` command, appropriate for the app's current size.

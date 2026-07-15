@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(lsof -nP -iTCP:5001 -sTCP:LISTEN)",
+      "Bash(curl -s -m 5 -i -X POST http://localhost:5001/api/login -c /tmp/yb_cookies2.txt -H \"Content-Type: application/json\" -d '{\"email\":\"alice@test.com\",\"password\":\"pw12345\"}')",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(curl -s -m 5 http://localhost:5001/api/health)",
+      "Bash(cat /private/tmp/claude-501/-Users-morkarniely-Documents-GitHub-yarnboard/8b046bc5-afe5-4e5a-b77e-ad9b337aa044/tasks/bn2sbtab5.output 2>&1 *)",
+      "Read(//private/tmp/**)",
+      "Bash(env)",
+      "Read(//Users/morkarniely/**)",
+      "Bash(curl -s -X POST http://localhost:5001/api/register -H \"Content-Type: application/json\" -d '{\"username\":\"alice\",\"email\":\"alice@test.com\",\"password\":\"pw12345\"}')",
+      "Bash(curl -s -c /tmp/yb_cookies.txt -X POST http://localhost:5001/api/login -H \"Content-Type: application/json\" -d '{\"email\":\"alice@test.com\",\"password\":\"pw12345\"}')",
+      "Bash(curl -s -b /tmp/yb_cookies.txt -X POST http://localhost:5001/api/patterns/preview -H \"Content-Type: application/json\" -d '{\"url\":\"http://localhost:8899/mock-pattern.html\"}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(node ./e2e-tmp-test.mjs)",
+      "Bash(node ./e2e-css-tmp.mjs)",
+      "Bash(pkill -f \"flask run\")",
+      "Bash(pkill -f \"vite\")",
+      "Bash(pkill -f \"http.server 8899\")",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)"
+    ]
+  }
+}

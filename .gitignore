@@ -185,5 +185,7 @@ node_modules/
 frontend/dist/
 
 # Local SQLite dev database (backend falls back to this when DATABASE_URL
-# isn't set)
+# isn't set). Flask-SQLAlchemy resolves relative sqlite:/// paths against
+# the app's instance folder, so the file lands in backend/instance/.
 backend/*.db
+backend/instance/

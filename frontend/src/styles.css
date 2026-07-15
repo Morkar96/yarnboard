@@ -44,11 +44,22 @@ form {
   max-width: 480px;
 }
 
-label {
+form label {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.9rem;
+}
+
+/* Checklist steps (and the publish-consent checkbox) are a checkbox
+   followed by inline text, not a stacked form field -- keep them on one
+   row rather than inheriting the column layout above. */
+.pattern-checklist label,
+.publish-consent-notice label {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.5rem;
 }
 
 input,
