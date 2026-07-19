@@ -12,7 +12,7 @@ concern, without wading through the other.
 
 import os
 
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 
 from .config import get_config
@@ -51,5 +51,13 @@ def create_app():
     @app.route("/api/health")
     def health():
         return {"status": "ok"}
+
+    @app.errorhandler(413)
+    def request_too_large(_error):
+        # Every route on this API returns JSON; without this handler,
+        # Flask's default 413 (from MAX_CONTENT_LENGTH, see config.py) would
+        # be an HTML page instead, which the frontend's `response.json()`
+        # can't parse.
+        return jsonify({"error": "That file is too large (max 5MB)."}), 413
 
     return app

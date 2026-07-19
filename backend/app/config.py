@@ -36,6 +36,13 @@ class BaseConfig:
         os.environ.get("CORS_ORIGINS", "http://localhost:5173")
     )
 
+    # Caps every incoming request body, including the HTML file uploads
+    # accepted by POST /api/patterns/preview-upload (the fallback for sites
+    # whose bot-detection blocks Yarnboard's automatic fetch) -- a saved
+    # pattern page is at most a few hundred KB, so 5MB is generous headroom
+    # while still guarding against someone uploading something absurd.
+    MAX_CONTENT_LENGTH = 5 * 1024 * 1024
+
 
 class DevConfig(BaseConfig):
     DEBUG = True

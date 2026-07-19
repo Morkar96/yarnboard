@@ -18,7 +18,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from ..extensions import db
 from ..models import Pattern, User, UserPatternProgress
-from ..scraper import scrape_pattern_from_url, ScraperError
+from ..scraper import parse_pattern_html, scrape_pattern_from_url, ScraperError
 from ..utils import get_current_user_id
 
 patterns_bp = Blueprint("patterns", __name__, url_prefix="/api/patterns")
@@ -32,15 +32,26 @@ def _require_login():
     return user_id, None
 
 
+def _existing_pattern_response(url: str):
+    """If `url` is already published, the short-circuit response for
+    /preview and /preview-upload alike: duplicate=True plus its id, so the
+    frontend can offer "view the existing pattern" instead of a review
+    form for content that would just fail to save later. Returns None if
+    there's no existing pattern for this URL."""
+    existing = Pattern.query.filter_by(original_url=url).first()
+    if not existing:
+        return None
+    return jsonify({
+        "duplicate": True,
+        "existing_pattern_id": existing.id,
+        "draft": None,
+    }), 200
+
+
 @patterns_bp.route("/preview", methods=["POST"])
 def preview_pattern():
     """
     Scrape `url` and return a draft for the user to review -- no DB write.
-
-    If a Pattern with this original_url already exists, short-circuits with
-    duplicate=True and the existing pattern's id so the frontend can offer
-    "view the existing pattern" instead of showing a review form for
-    content that would just fail to save later.
     """
     user_id, error = _require_login()
     if error:
@@ -50,16 +61,56 @@ def preview_pattern():
     if not url:
         return jsonify({"error": "url is required"}), 400
 
-    existing = Pattern.query.filter_by(original_url=url).first()
-    if existing:
-        return jsonify({
-            "duplicate": True,
-            "existing_pattern_id": existing.id,
-            "draft": None,
-        }), 200
+    duplicate_response = _existing_pattern_response(url)
+    if duplicate_response:
+        return duplicate_response
 
     try:
         draft = scrape_pattern_from_url(url)
+    except ScraperError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    return jsonify({"duplicate": False, "existing_pattern_id": None, "draft": draft}), 200
+
+
+@patterns_bp.route("/preview-upload", methods=["POST"])
+def preview_pattern_from_upload():
+    """
+    Like /preview, but the page's HTML comes from a file the user uploaded
+    instead of being fetched by the server.
+
+    This is the fallback for sites whose bot-detection (e.g. Cloudflare's
+    JS challenge -- see scraper.ScraperError messages) blocks Yarnboard's
+    automatic fetch entirely: the user opens the page in their own
+    browser, saves it, and uploads the saved HTML here. `url` is still
+    required and still used for dedup and attribution -- only the content
+    used for extraction is user-supplied instead of fetched by us.
+
+    multipart/form-data body: `url` (text field), `html_file` (file field).
+    """
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    url = (request.form.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "url is required"}), 400
+
+    uploaded = request.files.get("html_file")
+    if not uploaded or not uploaded.filename:
+        return jsonify({"error": "html_file is required"}), 400
+
+    duplicate_response = _existing_pattern_response(url)
+    if duplicate_response:
+        return duplicate_response
+
+    try:
+        html = uploaded.read().decode("utf-8", errors="replace")
+    except Exception:
+        return jsonify({"error": "Could not read the uploaded file as text."}), 400
+
+    try:
+        draft = parse_pattern_html(html, url)
     except ScraperError as exc:
         return jsonify({"error": str(exc)}), 502
 
