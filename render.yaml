@@ -22,7 +22,7 @@ services:
       - key: DATABASE_URL
         sync: false # paste your Neon connection string here
       - key: CORS_ORIGINS
-        value: https://yarnboard-frontend.onrender.com # update if your frontend URL differs
+        value: https://yarnboard.onrender.com # update if your frontend URL differs
 
   - type: web
     name: yarnboard-frontend
@@ -32,7 +32,7 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://yarnboard-backend.onrender.com # update if your backend URL differs
+        value: https://yarnboard.onrender.com # update if your backend URL differs
     routes:
       - type: rewrite
         source: /*
