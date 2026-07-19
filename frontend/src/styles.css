@@ -97,6 +97,18 @@ textarea {
   margin-bottom: 0.5rem;
 }
 
+.upload-fallback {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1.5rem;
+  background: #f4f4fa;
+}
+
+.upload-fallback form {
+  margin-top: 0.75rem;
+}
+
 .publish-consent-notice {
   border: 2px solid #b8860b;
   background: #fff8e1;

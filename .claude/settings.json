@@ -20,7 +20,14 @@
       "Bash(pkill -f \"http.server 8899\")",
       "Bash(npm install *)",
       "Bash(npx tsc *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(lsof -nP -iTCP:5173 -sTCP:LISTEN)",
+      "Bash(curl -s -m 5 -X POST http://localhost:5001/api/register -H \"Content-Type: application/json\" -d '{\"username\":\"testuser\",\"email\":\"testuser@example.com\",\"password\":\"password123\"}')",
+      "Bash(time curl -s -m 15 -X POST http://localhost:5001/api/register -H \"Content-Type: application/json\" -d '{\"username\":\"testuser2\",\"email\":\"testuser2@example.com\",\"password\":\"password123\"}')",
+      "Bash(ps -p 45179 -o pid,command)",
+      "Bash(curl -s -m 10 -X POST http://localhost:5001/api/register -H \"Content-Type: application/json\" -d '{\"username\":\"testuser\",\"email\":\"testuser@example.com\",\"password\":\"password123\"}')",
+      "Bash(node ./e2e-shot-tmp.mjs)",
+      "Bash(curl -s -m 5 -i http://localhost:5001/api/profile)"
     ]
   }
 }

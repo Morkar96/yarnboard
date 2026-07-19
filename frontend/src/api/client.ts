@@ -25,10 +25,15 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  // FormData bodies (file uploads) must NOT get a manual Content-Type --
+  // the browser sets one itself with the correct multipart boundary. JSON
+  // bodies (everything else) do need it set explicitly.
+  const isFormData = options.body instanceof FormData;
+
   const response = await fetch(`${BASE_URL}${path}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: isFormData ? options.headers : { "Content-Type": "application/json", ...options.headers },
   });
 
   const body = await response.json().catch(() => ({}));
@@ -68,6 +73,23 @@ export function previewPattern(url: string) {
   return request<PreviewResponse>("/api/patterns/preview", {
     method: "POST",
     body: JSON.stringify({ url }),
+  });
+}
+
+/**
+ * Fallback for sites that block Yarnboard's automatic fetch (e.g.
+ * Cloudflare's bot-detection challenge): the user saves the page's HTML
+ * themselves and uploads it here instead. `url` is still required -- it's
+ * what dedup and attribution are based on -- only the page content itself
+ * comes from the upload rather than a server-side fetch.
+ */
+export function previewPatternFromUpload(url: string, htmlFile: File) {
+  const formData = new FormData();
+  formData.append("url", url);
+  formData.append("html_file", htmlFile);
+  return request<PreviewResponse>("/api/patterns/preview-upload", {
+    method: "POST",
+    body: formData,
   });
 }
 
