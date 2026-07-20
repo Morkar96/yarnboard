@@ -1,19 +1,24 @@
 # Render Blueprint (https://render.com/docs/blueprint-spec).
-# Deploys the Flask API and the React static site as two independent
-# services. Neon Postgres is provisioned separately (Neon isn't a Render
-# add-on) -- create the database at neon.tech, then paste its connection
-# string into the backend service's DATABASE_URL below.
+# Deploys Yarnboard as a single combined web service: the build step
+# installs the backend's Python deps AND builds the React frontend, and
+# Flask itself serves the built frontend files alongside the /api/*
+# routes (see FRONTEND_DIST / serve_frontend in backend/app/__init__.py).
+# Because it's one service, frontend and backend are always same-origin
+# in production -- no separate CORS/cookie cross-origin config needed.
+#
+# Neon Postgres is provisioned separately (Neon isn't a Render add-on) --
+# create the database at neon.tech, then paste its connection string into
+# DATABASE_URL below.
 #
 # This file describes *what* to deploy; it does not deploy anything by
 # itself. See README.md "Deploying to Render" for the click-by-click steps.
 
 services:
   - type: web
-    name: yarnboard-backend
+    name: yarnboard
     runtime: python
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn wsgi:app
+    buildCommand: cd backend && pip install -r requirements.txt && cd ../frontend && npm install && npm run build
+    startCommand: cd backend && gunicorn wsgi:app
     envVars:
       - key: FLASK_ENV
         value: production
@@ -21,19 +26,8 @@ services:
         sync: false # set a real random value in the Render dashboard
       - key: DATABASE_URL
         sync: false # paste your Neon connection string here
-      - key: CORS_ORIGINS
-        value: https://yarnboard-frontend.onrender.com # update if your frontend URL differs
-
-  - type: web
-    name: yarnboard-frontend
-    runtime: static
-    rootDir: frontend
-    buildCommand: npm install && npm run build
-    staticPublishPath: dist
-    envVars:
-      - key: VITE_API_BASE_URL
-        value: https://yarnboard-backend.onrender.com # update if your backend URL differs
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+      # VITE_API_BASE_URL is deliberately NOT set here: the frontend build
+      # falls back to relative "/api/..." requests when it's unset (see
+      # frontend/src/api/client.ts), which is correct for a same-origin
+      # combined service. Only set it if you ever split the frontend back
+      # out into its own separately-hosted service.

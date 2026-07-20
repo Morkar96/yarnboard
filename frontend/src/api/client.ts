@@ -2,10 +2,16 @@
  * Typed fetch wrapper for the Yarnboard API.
  *
  * Every call sets credentials: 'include' so the Flask session cookie is
- * sent/received even though the frontend and backend run on different
- * origins (localhost:5173 vs localhost:5001 in dev; separate Render
- * services in prod) -- without this, login would appear to work but the
- * session cookie would never actually be stored or replayed.
+ * sent/received -- required locally, where the Vite dev server
+ * (localhost:5173) and Flask (localhost:5001) are different origins.
+ *
+ * BASE_URL falls back to "" (a relative path) when VITE_API_BASE_URL
+ * isn't set at build time, which is the production case: a single Flask
+ * service serves both this built frontend and the /api/* routes from the
+ * same origin, so `fetch("" + "/api/profile")` correctly resolves against
+ * whatever domain is currently serving the page, with no hardcoded URL
+ * needed. Locally, .env.local sets VITE_API_BASE_URL explicitly since the
+ * two dev servers really are on different ports.
  */
 import type {
   Pattern,
@@ -14,7 +20,7 @@ import type {
   User,
 } from "../types/models";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 export class ApiError extends Error {
   status: number;
