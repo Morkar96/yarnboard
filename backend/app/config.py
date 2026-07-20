@@ -2,13 +2,13 @@
 Environment-driven configuration for the Flask app.
 
 Two config classes are provided (`DevConfig`, `ProdConfig`); `create_app()`
-picks one based on the FLASK_ENV environment variable. The main behavioral
-difference between them is session cookie security: production runs the
-frontend and backend as two separate Render services on different
-subdomains, which is a cross-origin setup from the browser's point of view,
-so the session cookie must be sent with SameSite=None; Secure. Locally,
-both sides run on http://localhost, where that combination doesn't work
-(Secure cookies require HTTPS), so dev keeps the ordinary Lax defaults.
+picks one based on the FLASK_ENV environment variable. Production and dev
+differ only in the session cookie's Secure flag: in production the app is
+served over real HTTPS (a single Render service serves both the API and
+the built frontend -- see FRONTEND_DIST in app/__init__.py -- so this is
+always same-origin, Lax is sufficient, no SameSite=None cross-site
+workaround needed), whereas locally the Vite dev server runs on plain
+HTTP, where a Secure cookie would never be sent at all.
 """
 
 import os
@@ -51,7 +51,6 @@ class DevConfig(BaseConfig):
 
 class ProdConfig(BaseConfig):
     DEBUG = False
-    SESSION_COOKIE_SAMESITE = "None"
     SESSION_COOKIE_SECURE = True
 
 

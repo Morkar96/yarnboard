@@ -15,11 +15,22 @@ clearly before they publish.
 ## Architecture
 
 ```
-[Browser] --fetch(credentials:include)--> [React + TS static site, Vite build, on Render]
-                                                        |
-                                                        v
-                                    [Flask API on Render] <--psycopg2--> [Neon Postgres]
+[Browser] --fetch(credentials:include)--> [Flask, single Render service]
+                                                |         |
+                                                |         v
+                                                |    [built React/Vite files,
+                                                |     served directly by Flask --
+                                                |     see FRONTEND_DIST in app/__init__.py]
+                                                v
+                                          [Neon Postgres, via psycopg2]
 ```
+
+Frontend and backend deploy as **one combined Render service**: the build
+step installs the backend's Python deps and builds the React app, and
+Flask itself serves the built frontend files alongside its `/api/*`
+routes (see `serve_frontend` in `backend/app/__init__.py`). Locally they
+still run as two separate dev processes (Vite on 5173, Flask on 5001) for
+hot-reload -- see Local setup below.
 
 - **Backend** (`backend/`): Flask, split into a small app-factory package
   (`app/`) with two blueprints -- `auth` (accounts, session cookies) and
@@ -41,10 +52,12 @@ clearly before they publish.
   the logged-in user. No larger state library -- the app is small enough
   that page-local `useState` plus one context is sufficient.
 - **Auth**: server-side session cookies (Flask's signed session) plus
-  bcrypt password hashing. In production, the frontend and backend are two
-  separate Render services on different subdomains, so the session cookie
-  is set with `SameSite=None; Secure` (see `backend/app/config.py`) and
-  CORS is locked to an explicit origin allowlist.
+  bcrypt password hashing. Since frontend and backend are one combined
+  service in production, they're always same-origin -- an ordinary `Lax`
+  session cookie (just `Secure`, since prod is HTTPS) is enough, no
+  cross-site cookie workaround needed (see `backend/app/config.py`). CORS
+  is still enabled for local dev, where Vite and Flask really are
+  separate origins.
 
 ## Local setup
 
@@ -75,19 +88,25 @@ by hand before publishing.
 
 ## Deploying to Render
 
+Yarnboard deploys as a **single** Render web service (not separate
+frontend/backend services) -- Flask serves the built React app itself.
+
 1. Create a Postgres database at [neon.tech](https://neon.tech) and copy
    its connection string.
 2. In the Render dashboard, create a new **Blueprint** from this repo --
-   Render will read `render.yaml` and create both services
-   (`yarnboard-backend`, `yarnboard-frontend`).
-3. On the backend service, set the env vars marked `sync: false` in
-   `render.yaml`: `SECRET_KEY` (any long random string) and `DATABASE_URL`
-   (the Neon connection string from step 1).
-4. Once both services are live, double check `CORS_ORIGINS` on the backend
-   and `VITE_API_BASE_URL` on the frontend actually match each other's
-   deployed URLs (Render assigns the final URLs on first deploy, and
-   `render.yaml`'s defaults may need a one-time update in the dashboard).
-5. Run the schema against the Neon database once:
+   Render will read `render.yaml` and create one service (`yarnboard`)
+   with the build/start commands already filled in:
+   - Build: `cd backend && pip install -r requirements.txt && cd ../frontend && npm install && npm run build`
+   - Start: `cd backend && gunicorn wsgi:app`
+
+   (If you're configuring a Web Service manually instead of via Blueprint,
+   enter those same two commands yourself -- there's no `rootDir` to set,
+   since the build spans both `backend/` and `frontend/`.)
+3. Set the env vars marked `sync: false` in `render.yaml`: `SECRET_KEY`
+   (any long random string) and `DATABASE_URL` (the Neon connection string
+   from step 1). Don't set `VITE_API_BASE_URL` -- leaving it unset is what
+   makes the built frontend call the API with relative, same-origin paths.
+4. Run the schema against the Neon database once:
    `DATABASE_URL=<neon-connection-string> flask --app wsgi init-db`
    (run this locally, pointed at the production database, since there's no
    migration tool in v1 -- see Known limitations).
