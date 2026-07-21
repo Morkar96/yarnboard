@@ -16,6 +16,7 @@ top-to-bottom for one concern, without wading through the other.
 
 from pathlib import Path
 
+import click
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 
@@ -57,6 +58,51 @@ def create_app():
         with app.app_context():
             db.create_all()
         print("Database tables created.")
+
+    @app.cli.command("add-versioning-columns")
+    def add_versioning_columns():
+        """`flask --app wsgi add-versioning-columns` -- one-off, idempotent
+        ALTER TABLE for the pattern-editing feature's new columns
+        (User.is_admin, Pattern.instructions_version,
+        UserPatternProgress.pattern_version). `init-db`'s db.create_all()
+        only creates missing tables, never adds columns to tables that
+        already exist -- for a database created before this feature (e.g.
+        the live Neon database), this command is what actually adds them.
+        Safe to re-run (IF NOT EXISTS). Not needed for a brand-new
+        database -- init-db already creates the columns for you there.
+        Local SQLite dev: simpler to just delete yarnboard.db and re-run
+        init-db instead of using this."""
+        with app.app_context():
+            db.session.execute(db.text(
+                'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS instructions_version INTEGER NOT NULL DEFAULT 1'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE user_pattern_progress ADD COLUMN IF NOT EXISTS pattern_version INTEGER NOT NULL DEFAULT 1'
+            ))
+            db.session.commit()
+        print("Versioning columns added.")
+
+    @app.cli.command("make-admin")
+    @click.argument("email")
+    def make_admin(email):
+        """`flask --app wsgi make-admin <email>` -- grant one user
+        permission to edit ANY pattern, not just their own uploads (see
+        _can_edit in patterns/routes.py). Deliberately a CLI command
+        rather than a hardcoded email comparison in route logic, so it's
+        not tied to one specific address in the codebase."""
+        from .models import User
+
+        with app.app_context():
+            user = User.query.filter_by(email=email.strip().lower()).first()
+            if not user:
+                print(f"No user found with email {email}")
+                return
+            user.is_admin = True
+            db.session.commit()
+            print(f"{user.username} ({email}) is now an admin.")
 
     @app.route("/api/health")
     def health():

@@ -26,6 +26,12 @@ services:
         sync: false # set a real random value in the Render dashboard
       - key: DATABASE_URL
         sync: false # paste your Neon connection string here
+      - key: RESEND_API_KEY
+        sync: false # from resend.com -- pattern-updated emails are just logged if unset
+      - key: RESEND_FROM_EMAIL
+        sync: false # must be on a domain verified in your Resend account
+      - key: PUBLIC_APP_URL
+        value: https://yarnboard.onrender.com # update to match this service's real URL
       # VITE_API_BASE_URL is deliberately NOT set here: the frontend build
       # falls back to relative "/api/..." requests when it's unset (see
       # frontend/src/api/client.ts), which is correct for a same-origin

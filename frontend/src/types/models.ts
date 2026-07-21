@@ -7,6 +7,7 @@ export interface User {
   id: number;
   username: string;
   email: string;
+  is_admin: boolean;
 }
 
 /** One checklist step, with this viewer's personal completed state merged in
@@ -30,8 +31,25 @@ export interface Pattern {
   abbreviations: string | null;
   instructions: InstructionsMap;
   uploader: string;
+  uploader_id: number;
   created_at: string | null;
 }
+
+/** One pattern the current user has stale progress on -- drives the
+ * in-app "this pattern changed" banner (see UpdateBanner.tsx). */
+export interface PatternNotification {
+  id: number;
+  title: string;
+}
+
+/** Fields editable on an already-published pattern (see PATCH
+ * /api/patterns/<id>). original_url/source_site_name/source_domain stay
+ * immutable for dedup + attribution integrity, so they're not part of
+ * this type at all. */
+export type PatternEditPayload = Pick<
+  PatternDraft,
+  "title" | "author" | "materials" | "abbreviations" | "instructions"
+>;
 
 /** The editable, not-yet-saved draft returned by POST /api/patterns/preview.
  * Instructions here are plain strings (no per-user completed flag yet --
