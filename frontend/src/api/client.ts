@@ -16,6 +16,8 @@
 import type {
   Pattern,
   PatternDraft,
+  PatternEditPayload,
+  PatternNotification,
   PreviewResponse,
   User,
 } from "../types/models";
@@ -137,6 +139,31 @@ export function fetchCommunityPatterns() {
 
 export function fetchPattern(patternId: number) {
   return request<Pattern>(`/api/patterns/${patternId}`);
+}
+
+/** Edit an already-published pattern. 403s if the current user is neither
+ * an admin nor the original uploader (backend-enforced; see _can_edit in
+ * patterns/routes.py). */
+export function updatePattern(patternId: number, payload: PatternEditPayload) {
+  return request<{ message: string; pattern: Pattern }>(`/api/patterns/${patternId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Patterns the current user has stale (now-outdated) checklist progress
+ * on -- drives the in-app "this pattern changed" banner. */
+export function fetchNotifications() {
+  return request<PatternNotification[]>("/api/patterns/notifications");
+}
+
+/** Dismisses the banner for one pattern, clearing this user's stale
+ * progress on it immediately. Safe to call even if it's no longer stale
+ * (e.g. already cleared by toggling a checkbox) -- the backend no-ops. */
+export function acknowledgePatternUpdate(patternId: number) {
+  return request<{ message: string }>(`/api/patterns/${patternId}/acknowledge-update`, {
+    method: "POST",
+  });
 }
 
 export function toggleProgress(
