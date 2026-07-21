@@ -27,7 +27,8 @@
       "Bash(ps -p 45179 -o pid,command)",
       "Bash(curl -s -m 10 -X POST http://localhost:5001/api/register -H \"Content-Type: application/json\" -d '{\"username\":\"testuser\",\"email\":\"testuser@example.com\",\"password\":\"password123\"}')",
       "Bash(node ./e2e-shot-tmp.mjs)",
-      "Bash(curl -s -m 5 -i http://localhost:5001/api/profile)"
+      "Bash(curl -s -m 5 -i http://localhost:5001/api/profile)",
+      "Bash(gh pr *)"
     ]
   }
 }
