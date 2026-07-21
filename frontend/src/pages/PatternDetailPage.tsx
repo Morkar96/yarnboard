@@ -2,6 +2,7 @@
  * interactive per-user checklist (PatternChecklist). Public to view; the
  * checklist itself only accepts input from logged-in users. */
 import { useEffect, useState } from "react";
+import { Card, Spinner } from "react-bootstrap";
 import { useParams } from "react-router-dom";
 import { fetchPattern } from "../api/client";
 import AttributionTag from "../components/AttributionTag";
@@ -22,32 +23,38 @@ export default function PatternDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <p>Loading...</p>;
-  if (notFound || !pattern) return <p>Pattern not found.</p>;
+  if (loading) return <Spinner animation="border" variant="primary" />;
+  if (notFound || !pattern) return <p className="text-muted">Pattern not found.</p>;
 
   return (
-    <div className="pattern-detail-page">
-      <h1>{pattern.title}</h1>
+    <div>
+      <h1 className="mb-2">{pattern.title}</h1>
       <AttributionTag pattern={pattern} />
 
       {pattern.materials && (
-        <section>
-          <h2>Materials</h2>
-          <pre>{pattern.materials}</pre>
-        </section>
+        <Card className="shadow-sm mb-3">
+          <Card.Header className="bg-white fw-semibold">Materials</Card.Header>
+          <Card.Body>
+            <pre className="mb-0" style={{ whiteSpace: "pre-wrap" }}>
+              {pattern.materials}
+            </pre>
+          </Card.Body>
+        </Card>
       )}
 
       {pattern.abbreviations && (
-        <section>
-          <h2>Abbreviations</h2>
-          <pre>{pattern.abbreviations}</pre>
-        </section>
+        <Card className="shadow-sm mb-3">
+          <Card.Header className="bg-white fw-semibold">Abbreviations</Card.Header>
+          <Card.Body>
+            <pre className="mb-0" style={{ whiteSpace: "pre-wrap" }}>
+              {pattern.abbreviations}
+            </pre>
+          </Card.Body>
+        </Card>
       )}
 
-      <section>
-        <h2>Instructions</h2>
-        <PatternChecklist patternId={pattern.id} instructions={pattern.instructions} />
-      </section>
+      <h2 className="h4 mt-4 mb-3">Instructions</h2>
+      <PatternChecklist patternId={pattern.id} instructions={pattern.instructions} />
     </div>
   );
 }

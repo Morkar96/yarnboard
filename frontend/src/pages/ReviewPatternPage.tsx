@@ -3,6 +3,7 @@
  * state from SubmitPatternPage rather than a URL param, since a draft is
  * never persisted anywhere until Publish is clicked. */
 import { useState } from "react";
+import { Alert, Button } from "react-bootstrap";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { ApiError, submitPattern } from "../api/client";
 import PatternReviewForm from "../components/PatternReviewForm";
@@ -45,15 +46,15 @@ export default function ReviewPatternPage() {
   }
 
   return (
-    <div className="review-page">
-      <h1>Review before publishing</h1>
-      <p>Source: {state.originalUrl}</p>
+    <div>
+      <h1 className="mb-2">Review before publishing</h1>
+      <p className="text-muted">Source: {state.originalUrl}</p>
       <PatternReviewForm draft={draft} onChange={setDraft} />
       <PublishConsentNotice acknowledged={acknowledged} onAcknowledgeChange={setAcknowledged} />
-      {error && <p className="form-error">{error}</p>}
-      <button type="button" disabled={!acknowledged || publishing} onClick={handlePublish}>
+      {error && <Alert variant="danger">{error}</Alert>}
+      <Button variant="primary" disabled={!acknowledged || publishing} onClick={handlePublish}>
         {publishing ? "Publishing..." : "Publish Pattern"}
-      </button>
+      </Button>
     </div>
   );
 }

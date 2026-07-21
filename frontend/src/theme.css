@@ -1,0 +1,109 @@
+/**
+ * Yarnboard's Bootstrap theme: light backgrounds, eggplant purple accents,
+ * softer corners everywhere. Must be imported AFTER bootstrap.min.css
+ * (see main.tsx) so these rules win the cascade.
+ *
+ * Two override strategies are used here, matching how Bootstrap 5.3's
+ * compiled CSS actually resolves colors (verified against the shipped
+ * bundle in node_modules -- Bootstrap's docs describe a CSS-variable
+ * theming API, but the *precompiled* bootstrap.min.css doesn't wire every
+ * component through the root variables):
+ *   1. Root-level variables (--bs-primary, --bs-border-radius, --bs-body-bg,
+ *      etc.) cascade automatically into every rule that already references
+ *      them with var(...) -- this covers page background/text, links,
+ *      border-radius everywhere, and the .bg-primary/.text-primary/
+ *      .border-primary utility classes.
+ *   2. Everything else -- buttons, focus rings, checked checkboxes --
+ *      hardcodes literal hex colors per-component instead of referencing
+ *      the root variables, so those need their own explicit overrides
+ *      below (targeting the same local custom properties Bootstrap
+ *      defines on each component, e.g. --bs-btn-bg on .btn-primary).
+ */
+
+:root {
+  --yb-eggplant: #6b3f73;
+  --yb-eggplant-rgb: 107, 63, 115;
+  --yb-eggplant-dark: #4a2b52;
+  --yb-eggplant-dark-rgb: 74, 43, 82;
+  --yb-eggplant-light: #9b6fa3;
+  --yb-bg: #fbf8fc;
+  --yb-surface: #ffffff;
+  --yb-border: #e3d5e7;
+  --yb-text: #2e1f33;
+  --yb-text-muted: #7a6580;
+
+  /* --- 1. Variables the compiled bundle already consumes via var(...) --- */
+  --bs-primary: var(--yb-eggplant);
+  --bs-primary-rgb: var(--yb-eggplant-rgb);
+  --bs-body-bg: var(--yb-bg);
+  --bs-body-color: var(--yb-text);
+  --bs-border-color: var(--yb-border);
+  --bs-border-color-translucent: var(--yb-border);
+  --bs-link-color-rgb: var(--yb-eggplant-rgb);
+  --bs-link-hover-color-rgb: var(--yb-eggplant-dark-rgb);
+
+  /* Softer corners everywhere (Bootstrap defaults: sm .25rem, base .375rem,
+     lg .5rem, xl 1rem, xxl 2rem) */
+  --bs-border-radius-sm: 0.5rem;
+  --bs-border-radius: 0.75rem;
+  --bs-border-radius-lg: 1rem;
+  --bs-border-radius-xl: 1.25rem;
+  --bs-border-radius-xxl: 1.5rem;
+}
+
+/* --- 2. Components that hardcode colors instead of referencing --bs-primary --- */
+
+.btn-primary {
+  --bs-btn-bg: var(--yb-eggplant);
+  --bs-btn-border-color: var(--yb-eggplant);
+  --bs-btn-hover-bg: var(--yb-eggplant-dark);
+  --bs-btn-hover-border-color: var(--yb-eggplant-dark);
+  --bs-btn-active-bg: var(--yb-eggplant-dark);
+  --bs-btn-active-border-color: var(--yb-eggplant-dark);
+  --bs-btn-disabled-bg: var(--yb-eggplant);
+  --bs-btn-disabled-border-color: var(--yb-eggplant);
+  --bs-btn-focus-shadow-rgb: var(--yb-eggplant-rgb);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--yb-eggplant);
+  --bs-btn-border-color: var(--yb-eggplant);
+  --bs-btn-hover-bg: var(--yb-eggplant);
+  --bs-btn-hover-border-color: var(--yb-eggplant);
+  --bs-btn-active-bg: var(--yb-eggplant);
+  --bs-btn-active-border-color: var(--yb-eggplant);
+  --bs-btn-disabled-color: var(--yb-eggplant);
+  --bs-btn-focus-shadow-rgb: var(--yb-eggplant-rgb);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--yb-eggplant-light);
+  box-shadow: 0 0 0 0.25rem rgba(var(--yb-eggplant-rgb), 0.25);
+}
+
+.form-check-input:checked {
+  background-color: var(--yb-eggplant);
+  border-color: var(--yb-eggplant);
+}
+
+.form-check-input:focus {
+  border-color: var(--yb-eggplant-light);
+  box-shadow: 0 0 0 0.25rem rgba(var(--yb-eggplant-rgb), 0.25);
+}
+
+/* Solid eggplant navbar. Paired with data-bs-theme="dark" on the <Navbar>
+   element itself (see NavBar.tsx) so Bootstrap's own light-on-dark
+   nav-link colors apply automatically instead of needing per-link
+   overrides here. */
+.navbar-eggplant {
+  background-color: var(--yb-eggplant-dark);
+}
+
+/* Bootstrap's default .text-muted / .text-body-secondary read as plain
+   gray, which looks flat against the eggplant/lavender palette -- give
+   secondary text a soft purple-gray tint instead. */
+.text-body-secondary,
+.text-muted {
+  color: var(--yb-text-muted) !important;
+}

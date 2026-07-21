@@ -1,6 +1,7 @@
 /** Patterns this account personally submitted -- distinct from patterns
  * merely bookmarked from the community (see MySavedPage). */
 import { useEffect, useState } from "react";
+import { Col, Row, Spinner } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { fetchMyUploads } from "../api/client";
 import PatternCard from "../components/PatternCard";
@@ -16,19 +17,23 @@ export default function MyUploadsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <Spinner animation="border" variant="primary" />;
 
   return (
-    <div className="my-uploads-page">
-      <h1>My Uploads</h1>
+    <div>
+      <h1 className="mb-4">My Uploads</h1>
       {patterns.length === 0 && (
-        <p>
+        <p className="text-muted">
           You haven't submitted any patterns yet. <Link to="/submit">Submit one</Link>.
         </p>
       )}
-      {patterns.map((pattern) => (
-        <PatternCard key={pattern.id} pattern={pattern} />
-      ))}
+      <Row xs={1} sm={2} lg={3} className="g-3">
+        {patterns.map((pattern) => (
+          <Col key={pattern.id}>
+            <PatternCard pattern={pattern} />
+          </Col>
+        ))}
+      </Row>
     </div>
   );
 }
