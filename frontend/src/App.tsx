@@ -2,7 +2,9 @@ import { Container } from "react-bootstrap";
 import { Navigate, Route, Routes } from "react-router-dom";
 import NavBar from "./components/NavBar";
 import ProtectedRoute from "./components/ProtectedRoute";
+import UpdateBanner from "./components/UpdateBanner";
 import CommunityPage from "./pages/CommunityPage";
+import EditPatternPage from "./pages/EditPatternPage";
 import LoginPage from "./pages/LoginPage";
 import MySavedPage from "./pages/MySavedPage";
 import MyUploadsPage from "./pages/MyUploadsPage";
@@ -15,6 +17,7 @@ export default function App() {
   return (
     <>
       <NavBar />
+      <UpdateBanner />
       <Container as="main" className="py-4">
         <Routes>
           <Route path="/" element={<Navigate to="/community" replace />} />
@@ -22,6 +25,14 @@ export default function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/community" element={<CommunityPage />} />
           <Route path="/pattern/:id" element={<PatternDetailPage />} />
+          <Route
+            path="/pattern/:id/edit"
+            element={
+              <ProtectedRoute>
+                <EditPatternPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/submit"
             element={
