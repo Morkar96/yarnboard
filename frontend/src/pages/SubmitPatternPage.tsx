@@ -7,6 +7,7 @@
  * happens this page offers a fallback: save the page's HTML yourself and
  * upload it, and the same extraction heuristics run against that instead. */
 import { useState, type FormEvent } from "react";
+import { Alert, Button, Card, Form } from "react-bootstrap";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, previewPattern, previewPatternFromUpload } from "../api/client";
 
@@ -66,56 +67,61 @@ export default function SubmitPatternPage() {
   }
 
   return (
-    <div className="submit-page">
-      <h1>Submit a Pattern</h1>
-      <p>
+    <div>
+      <h1 className="mb-3">Submit a Pattern</h1>
+      <p className="text-muted">
         Paste a link to a knitting or crochet pattern webpage. We'll pull out the title,
         materials, abbreviations, and instructions for you to review before publishing.
       </p>
-      <form onSubmit={handleSubmit}>
-        <label>
-          Pattern URL
-          <input
+      <Form onSubmit={handleSubmit} className="mb-2" style={{ maxWidth: "32rem" }}>
+        <Form.Group className="mb-3" controlId="submit-url">
+          <Form.Label>Pattern URL</Form.Label>
+          <Form.Control
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://example.com/my-pattern"
             required
           />
-        </label>
-        {error && <p className="form-error">{error}</p>}
-        <button type="submit" disabled={loading}>
+        </Form.Group>
+        {error && <Alert variant="danger">{error}</Alert>}
+        <Button type="submit" variant="primary" disabled={loading}>
           {loading ? "Fetching..." : "Preview"}
-        </button>
-      </form>
+        </Button>
+      </Form>
 
       {offerUpload && (
-        <div className="upload-fallback">
-          <p>
-            Couldn't fetch that page automatically -- some sites block automated requests. If
-            you have the page saved as an HTML file (open it in your browser, then "Save Page
-            As..." / "Save As" and choose "Webpage, HTML only"), you can upload it here instead.
-            The URL above is still used to credit the original source and to avoid duplicates.
-          </p>
-          <form onSubmit={handleUploadPreview}>
-            <label>
-              Saved HTML file
-              <input
-                type="file"
-                accept=".html,.htm,text/html"
-                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-                required
-              />
-            </label>
-            {uploadError && <p className="form-error">{uploadError}</p>}
-            <button type="submit" disabled={uploadLoading || !uploadFile}>
-              {uploadLoading ? "Processing..." : "Preview from file"}
-            </button>
-          </form>
-        </div>
+        <Card className="shadow-sm my-4" style={{ maxWidth: "32rem" }}>
+          <Card.Body>
+            <p>
+              Couldn't fetch that page automatically -- some sites block automated requests. If
+              you have the page saved as an HTML file (open it in your browser, then "Save Page
+              As..." / "Save As" and choose "Webpage, HTML only"), you can upload it here
+              instead. The URL above is still used to credit the original source and to avoid
+              duplicates.
+            </p>
+            <Form onSubmit={handleUploadPreview}>
+              <Form.Group className="mb-3" controlId="submit-upload-file">
+                <Form.Label>Saved HTML file</Form.Label>
+                <Form.Control
+                  type="file"
+                  accept=".html,.htm,text/html"
+                  onChange={(e) =>
+                    setUploadFile((e.target as HTMLInputElement).files?.[0] ?? null)
+                  }
+                  required
+                />
+              </Form.Group>
+              {uploadError && <Alert variant="danger">{uploadError}</Alert>}
+              <Button type="submit" variant="outline-primary" disabled={uploadLoading || !uploadFile}>
+                {uploadLoading ? "Processing..." : "Preview from file"}
+              </Button>
+            </Form>
+          </Card.Body>
+        </Card>
       )}
 
-      <p>
+      <p className="text-muted">
         Already have this pattern saved? Check the <Link to="/community">Community</Link> page
         first -- Yarnboard avoids storing the same source URL twice.
       </p>

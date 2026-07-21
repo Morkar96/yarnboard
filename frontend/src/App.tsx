@@ -1,3 +1,4 @@
+import { Container } from "react-bootstrap";
 import { Navigate, Route, Routes } from "react-router-dom";
 import NavBar from "./components/NavBar";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -14,7 +15,7 @@ export default function App() {
   return (
     <>
       <NavBar />
-      <main className="app-content">
+      <Container as="main" className="py-4">
         <Routes>
           <Route path="/" element={<Navigate to="/community" replace />} />
           <Route path="/login" element={<LoginPage />} />
@@ -54,7 +55,7 @@ export default function App() {
             }
           />
         </Routes>
-      </main>
+      </Container>
     </>
   );
 }

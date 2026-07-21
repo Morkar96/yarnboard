@@ -15,8 +15,13 @@ Treat every field this module returns as a suggestion, not ground truth.
 import re
 from urllib.parse import unquote, urlparse
 
-import requests
 from bs4 import BeautifulSoup
+
+from playwright.sync_api import (
+    Page,
+    TimeoutError as PlaywrightTimeoutError,
+    sync_playwright,
+)
 
 USER_AGENT = (
     "Mozilla/5.0 (compatible; YarnboardBot/1.0; "
@@ -45,8 +50,8 @@ BLOCK_LEVEL_TAGS = ("p", "li", "div", "tr", "h1", "h2", "h3", "h4", "h5", "h6")
 MAX_LABEL_LENGTH = 80
 
 MATERIALS_KEYWORDS = ["materials", "you will need", "you'll need", "ingredients", "supplies"]
-ABBREVIATIONS_KEYWORDS = ["abbreviation", "abbrev", "glossary", "terms"]
-INSTRUCTIONS_KEYWORDS = ["instructions", "pattern", "directions", "how to make"]
+ABBREVIATIONS_KEYWORDS = ["abbreviation", "abbrev", "glossary", "terms", "ab"]
+INSTRUCTIONS_KEYWORDS = ["instructions", "pattern", "crochet pattern", "directions", "how to make"]
 
 # Matches a numbered line used as a fallback step splitter when a page has
 # no line-break markup at all, e.g. "1. Cast on 40 stitches. 2. Join...".
@@ -70,6 +75,31 @@ def scrape_pattern_from_url(url: str) -> dict:
     and how parsing failures degrade.
     """
     return parse_pattern_html(_fetch_html(url), url)
+def looks_like_cloudflare_challenge(page: Page) -> bool:
+    title = page.title().lower()
+    body_text = page.locator("body").inner_text(timeout=5_000).lower()
+
+    challenge_phrases = (
+        "just a moment",
+        "checking your browser",
+        "verify you are human",
+        "performing security verification",
+        "cloudflare",
+    )
+
+    return any(
+        phrase in title or phrase in body_text
+        for phrase in challenge_phrases
+    )
+def wait_for_article(page: Page) -> None:
+    try:
+        page.locator("h1").filter(
+            has_text="Rainbow Cuddles Crochet Unicorn Pattern"
+        ).wait_for(timeout=20_000)
+    except PlaywrightTimeoutError as exc:
+        raise RuntimeError(
+            "The article did not load. Cloudflare may still be blocking the page."
+        ) from exc
 
 
 def parse_pattern_html(html: str, source_url: str) -> dict:
@@ -109,6 +139,9 @@ def _fetch_html(url: str) -> str:
     """
     Download the page HTML, raising ScraperError on any failure.
 
+    Uses a headless browser (Playwright) to handle JavaScript-based sites
+    and bot-detection challenges (e.g. Cloudflare).
+
     Also accepts file:// URLs, which are read straight off disk instead of
     over HTTP -- handy for testing the extraction heuristics against a
     saved HTML snapshot (see the CLI entry point at the bottom of this
@@ -127,41 +160,35 @@ def _fetch_html(url: str) -> str:
         except OSError as exc:
             raise ScraperError(f"Could not read {path}: {exc}") from exc
 
-    try:
-        response = requests.get(
-            url,
-            timeout=REQUEST_TIMEOUT_SECONDS,
-            headers={"User-Agent": USER_AGENT},
-        )
-    except requests.RequestException as exc:
-        raise ScraperError(f"Could not reach {url}: {exc}") from exc
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(user_agent=USER_AGENT)
+        try:
+            response = page.goto(url, timeout=30_000, wait_until="domcontentloaded")
 
-    if response.status_code != 200:
-        if _looks_like_bot_challenge(response):
-            raise ScraperError(
-                f"{url} is protected by a bot-detection service (e.g. Cloudflare) that "
-                "blocks automated fetching -- this can't be scraped. Copy the title, "
-                "materials, abbreviations, and instructions from the page yourself and "
-                "fill them in on the review form instead."
-            )
-        raise ScraperError(f"{url} returned HTTP {response.status_code}")
+            if looks_like_cloudflare_challenge(page):
+                wait_for_article(page)
 
-    return response.text
+            if response is None or not response.ok:
+                if looks_like_cloudflare_challenge(page):
+                    raise ScraperError(
+                        f"{url} is protected by a bot-detection service (e.g. Cloudflare) that "
+                        "blocks automated fetching. Yarnboard tried to wait for the challenge to "
+                        "complete, but it may have failed or timed out. You can try saving "
+                        "the page's HTML yourself and using the file upload option instead."
+                    )
+                status = response.status if response else "unknown"
+                raise ScraperError(f"{url} returned HTTP {status}")
 
+            content = page.content()
+        except PlaywrightTimeoutError as exc:
+            raise ScraperError(f"Timed out trying to fetch {url}") from exc
+        except Exception as exc:
+            raise ScraperError(f"Could not fetch {url} with Playwright: {exc}") from exc
+        finally:
+            browser.close()
 
-def _looks_like_bot_challenge(response: "requests.Response") -> bool:
-    """
-    True if a non-200 response looks like an anti-bot interstitial (e.g.
-    Cloudflare's "Just a moment..." JS challenge) rather than a normal
-    error page. These can't be solved by a plain HTTP client -- they
-    require actually running a browser -- so there's no point retrying or
-    tweaking headers; the caller should surface a clear, specific message
-    instead of a generic "HTTP 403".
-    """
-    if response.headers.get("cf-mitigated"):
-        return True
-    body_start = response.text[:2000].lower()
-    return "just a moment" in body_start or "checking your browser" in body_start
+    return content
 
 
 def _get_site_name(soup: BeautifulSoup, url: str) -> tuple[str, str]:
@@ -253,15 +280,24 @@ def _find_content_container(soup: BeautifulSoup):
     instructions keyword the same way the page's <h1> can (see the
     title-exclusion note on _extract_sections).
     """
-    article = soup.find("article")
-    if article:
+    # Some themes wrap every blog *comment* in its own <article> too (seen
+    # on WordPress/Divi sites, e.g. <article class="comment-body">) --
+    # taking the first <article> on the page unconditionally can land on
+    # a random early comment instead of the real post. Skip those.
+    for article in soup.find_all("article"):
+        classes = " ".join(article.get("class") or [])
+        if "comment" in classes or "comment" in (article.get("id") or ""):
+            continue
         return article
 
     tag = soup.find(attrs={"itemprop": "articleBody"})
     if tag:
         return tag
 
-    class_re = re.compile(r"(post-body|entry-content|post-content|article-body|article-content)", re.I)
+    # Separator varies by theme/builder -- "entry-content" (hyphen) is the
+    # common WordPress convention, but page-builder themes like Divi use
+    # underscores instead (e.g. "et_pb_post_content"), so both must match.
+    class_re = re.compile(r"(post[-_]body|entry[-_]content|post[-_]content|article[-_]body|article[-_]content)", re.I)
     tag = soup.find(attrs={"class": class_re})
     if tag:
         return tag
@@ -425,7 +461,6 @@ if __name__ == "__main__":
             print(f"Not a URL and not an existing file: {target}", file=sys.stderr)
             sys.exit(1)
         target = local_path.resolve().as_uri()
-
     try:
         result = scrape_pattern_from_url(target)
     except ScraperError as exc:

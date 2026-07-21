@@ -9,6 +9,7 @@
  * side, since progress is always tied to a specific user's account.
  */
 import { useState } from "react";
+import { Alert, Card, Form } from "react-bootstrap";
 import { toggleProgress } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import type { InstructionsMap } from "../types/models";
@@ -41,33 +42,29 @@ export default function PatternChecklist({ patternId, instructions }: Props) {
 
   const parts = Object.entries(localInstructions);
   if (parts.length === 0) {
-    return <p>No instructions were extracted for this pattern.</p>;
+    return <p className="text-muted">No instructions were extracted for this pattern.</p>;
   }
 
   return (
-    <div className="pattern-checklist">
-      {!user && (
-        <p className="checklist-login-hint">Log in to track your progress on this pattern.</p>
-      )}
+    <div className="d-flex flex-column gap-3">
+      {!user && <Alert variant="light">Log in to track your progress on this pattern.</Alert>}
       {parts.map(([part, steps]) => (
-        <section key={part}>
-          <h3>{part}</h3>
-          <ul>
+        <Card key={part} className="shadow-sm">
+          <Card.Header className="bg-white fw-semibold">{part}</Card.Header>
+          <Card.Body className="d-flex flex-column gap-2">
             {steps.map((step, index) => (
-              <li key={index}>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={step.completed}
-                    disabled={!user}
-                    onChange={(e) => handleToggle(part, index, e.target.checked)}
-                  />
-                  {step.step}
-                </label>
-              </li>
+              <Form.Check
+                key={index}
+                type="checkbox"
+                id={`${part}-${index}`}
+                label={step.step}
+                checked={step.completed}
+                disabled={!user}
+                onChange={(e) => handleToggle(part, index, e.target.checked)}
+              />
             ))}
-          </ul>
-        </section>
+          </Card.Body>
+        </Card>
       ))}
     </div>
   );

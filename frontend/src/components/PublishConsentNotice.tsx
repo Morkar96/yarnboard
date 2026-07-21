@@ -4,6 +4,8 @@
  * spec: uploaders must be clearly told their submission is published to the
  * whole community, not just saved privately.
  */
+import { Alert, Form } from "react-bootstrap";
+
 interface Props {
   acknowledged: boolean;
   onAcknowledgeChange: (acknowledged: boolean) => void;
@@ -11,21 +13,20 @@ interface Props {
 
 export default function PublishConsentNotice({ acknowledged, onAcknowledgeChange }: Props) {
   return (
-    <div className="publish-consent-notice">
-      <p>
+    <Alert variant="warning" className="my-4">
+      <p className="mb-3">
         <strong>Publishing to Yarnboard:</strong> this pattern will be saved to the shared
         Yarnboard community library and visible to all users, along with your username and a
         link back to the original source. Please only submit patterns you have the right to
         share, and review the extracted content above for accuracy before publishing.
       </p>
-      <label>
-        <input
-          type="checkbox"
-          checked={acknowledged}
-          onChange={(e) => onAcknowledgeChange(e.target.checked)}
-        />
-        I understand this pattern will be published publicly.
-      </label>
-    </div>
+      <Form.Check
+        type="checkbox"
+        id="publish-consent"
+        label="I understand this pattern will be published publicly."
+        checked={acknowledged}
+        onChange={(e) => onAcknowledgeChange(e.target.checked)}
+      />
+    </Alert>
   );
 }

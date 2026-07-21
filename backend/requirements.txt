@@ -9,3 +9,4 @@ python-dotenv==1.0.1
 # Production server + Neon (Postgres) driver.
 gunicorn==22.0.0
 psycopg2-binary==2.9.12
+playwright==1.61.0

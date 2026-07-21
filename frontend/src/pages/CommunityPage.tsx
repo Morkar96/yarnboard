@@ -1,6 +1,7 @@
 /** All published patterns, from every user. Public -- no login required to
  * browse, matching the backend's GET /api/patterns/community. */
 import { useEffect, useState } from "react";
+import { Col, Row, Spinner } from "react-bootstrap";
 import { fetchCommunityPatterns, fetchMySaved, savePattern, unsavePattern } from "../api/client";
 import PatternCard from "../components/PatternCard";
 import { useAuth } from "../context/AuthContext";
@@ -35,20 +36,23 @@ export default function CommunityPage() {
     }
   }
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <Spinner animation="border" variant="primary" />;
 
   return (
-    <div className="community-page">
-      <h1>Community Patterns</h1>
-      {patterns.length === 0 && <p>No patterns have been published yet.</p>}
-      {patterns.map((pattern) => (
-        <PatternCard
-          key={pattern.id}
-          pattern={pattern}
-          onToggleSave={user ? handleToggleSave : undefined}
-          isSaved={savedIds.has(pattern.id)}
-        />
-      ))}
+    <div>
+      <h1 className="mb-4">Community Patterns</h1>
+      {patterns.length === 0 && <p className="text-muted">No patterns have been published yet.</p>}
+      <Row xs={1} sm={2} lg={3} className="g-3">
+        {patterns.map((pattern) => (
+          <Col key={pattern.id}>
+            <PatternCard
+              pattern={pattern}
+              onToggleSave={user ? handleToggleSave : undefined}
+              isSaved={savedIds.has(pattern.id)}
+            />
+          </Col>
+        ))}
+      </Row>
     </div>
   );
 }

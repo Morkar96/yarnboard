@@ -189,3 +189,6 @@ frontend/dist/
 # the app's instance folder, so the file lands in backend/instance/.
 backend/*.db
 backend/instance/
+
+# Working notes, not part of the app
+SESSION_CONTEXT.txt
