@@ -4,8 +4,9 @@ Account endpoints: register, login, logout, and the current-user profile.
 Auth is plain server-side session cookies (Flask's signed session, backed
 by SECRET_KEY) plus bcrypt password hashing -- no JWTs, no third-party
 auth provider. That's a deliberate size-appropriate choice for this app;
-see config.py for how the session cookie is hardened for cross-origin use
-in production (frontend and backend are separate Render services).
+see config.py for the cookie's Secure flag in production (a single Flask
+service serves both the API and the built frontend, so this is always
+same-origin -- no cross-site cookie workaround needed).
 """
 
 from flask import Blueprint, request, jsonify, session
@@ -73,4 +74,9 @@ def profile():
         session.pop("user_id", None)
         return jsonify({"error": "Unauthorized"}), 401
 
-    return jsonify({"id": user.id, "username": user.username, "email": user.email}), 200
+    return jsonify({
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_admin": user.is_admin,
+    }), 200

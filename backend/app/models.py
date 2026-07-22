@@ -32,6 +32,10 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
+    # Can edit ANY pattern, not just their own uploads. Set via the
+    # `flask make-admin <email>` CLI command (see app/__init__.py) --
+    # deliberately not a hardcoded email comparison in route logic.
+    is_admin = db.Column(db.Boolean, nullable=False, default=False)
 
     # Patterns this user personally submitted (shown on "My Uploads").
     uploaded_patterns = db.relationship("Pattern", backref="uploader", lazy=True)
@@ -76,6 +80,12 @@ class Pattern(db.Model):
     materials = db.Column(db.Text, nullable=True)
     abbreviations = db.Column(db.Text, nullable=True)
     instructions = db.Column(db.JSON, nullable=True)
+    # Bumped only when `instructions` actually changes via an edit (see
+    # patterns/routes.py's edit endpoint) -- this is the whole basis for
+    # detecting stale per-user progress. See UserPatternProgress below for
+    # how it's consumed; deliberately NOT used for edit-conflict detection
+    # (last-write-wins on edits, same as every other write path here).
+    instructions_version = db.Column(db.Integer, nullable=False, default=1)
 
     uploader_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
@@ -98,7 +108,13 @@ class Pattern(db.Model):
         convenient for the frontend checklist. Without a user id (public/
         anonymous views), steps are returned as {"step": <text>,
         "completed": False} so the response shape is always the same.
-        The merge never touches what's stored on this row.
+
+        If the pattern has been edited since this user's progress was last
+        touched (progress.pattern_version < self.instructions_version), it's
+        stale: rendered as all-unchecked here, same as having no progress at
+        all. This method never writes to the DB -- the actual cleanup of a
+        stale row happens lazily elsewhere (toggle_progress) or explicitly
+        (the /acknowledge-update endpoint), never as a side effect of a read.
         """
         instructions_with_progress = {}
         progress = None
@@ -107,9 +123,11 @@ class Pattern(db.Model):
                 user_id=current_user_id, pattern_id=self.id
             ).first()
 
+        stale = progress is not None and progress.pattern_version < self.instructions_version
+
         for part, steps in (self.instructions or {}).items():
             completed_flags = None
-            if progress and part in (progress.completed_steps or {}):
+            if progress and not stale and part in (progress.completed_steps or {}):
                 completed_flags = progress.completed_steps[part]
 
             instructions_with_progress[part] = [
@@ -133,6 +151,7 @@ class Pattern(db.Model):
             "abbreviations": self.abbreviations,
             "instructions": instructions_with_progress,
             "uploader": self.uploader.username if self.uploader else "Unknown",
+            "uploader_id": self.uploader_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -145,16 +164,25 @@ class UserPatternProgress(db.Model):
     booleans instead of step text, e.g.:
         {"Part 1: Cast On": [true, false], "Part 2: Body": [false, false]}
     Steps are matched *by index*, not by re-storing the step text, so this
-    row assumes Pattern.instructions doesn't change shape after a user
-    starts tracking it -- true in v1, since patterns are immutable once
-    submitted (there's no "edit pattern" feature yet). If that assumption
-    ever breaks, this table needs a migration story alongside it.
+    row assumes Pattern.instructions doesn't change shape relative to
+    whatever `pattern_version` this row is stamped with.
+
+    Patterns CAN change now (see the edit endpoint in patterns/routes.py),
+    which is exactly what `pattern_version` guards against: it's set to
+    `Pattern.instructions_version` whenever this row is created or wiped,
+    and compared against the pattern's current version everywhere progress
+    is read or written (Pattern.to_dict, toggle_progress, the notifications
+    endpoint, /acknowledge-update). A row whose `pattern_version` is behind
+    the pattern's is stale and must never be trusted at face value -- see
+    those call sites for the three different (read-only vs. write) rules
+    that apply.
     """
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     pattern_id = db.Column(db.Integer, db.ForeignKey("pattern.id"), nullable=False)
     completed_steps = db.Column(db.JSON, nullable=False, default=dict)
+    pattern_version = db.Column(db.Integer, nullable=False, default=1)
     updated_at = db.Column(
         db.DateTime, server_default=db.func.now(), onupdate=db.func.now()
     )
@@ -165,3 +193,10 @@ class UserPatternProgress(db.Model):
     __table_args__ = (
         db.UniqueConstraint("user_id", "pattern_id", name="uq_user_pattern_progress"),
     )
+
+    def has_any_completed_step(self) -> bool:
+        """True if at least one step is actually checked off. Used to keep
+        the update-notification banner and email from firing for a progress
+        row that's technically stale but represents no real engagement
+        (e.g. a saved-but-never-opened pattern)."""
+        return any(any(flags) for flags in (self.completed_steps or {}).values())

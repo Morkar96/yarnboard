@@ -1,21 +1,28 @@
 """
-Pattern endpoints: scrape-preview, submit/publish, the three list views
-(mine / saved / community), pattern detail, and per-user checklist
-progress.
+Pattern endpoints: scrape-preview, submit/publish, edit, the three list
+views (mine / saved / community), pattern detail, per-user checklist
+progress, and change notifications.
 
-Two endpoints matter most for correctness:
+Endpoints that matter most for correctness:
   - POST /preview never writes to the database -- it's pure "show me what
     you'd get" so the user can review before publishing.
   - POST /submit is the only endpoint that creates a Pattern row, and it
     re-checks the URL uniqueness right before inserting (in addition to the
     DB-level unique constraint) so two near-simultaneous submissions of the
     same URL can't both succeed.
+  - PATCH /<id> is the only endpoint that edits a published Pattern row.
+    Editing `instructions` invalidates other users' checklist progress on
+    it (see UserPatternProgress.pattern_version's docstring in models.py);
+    this endpoint, toggle_progress, and /acknowledge-update are the three
+    places that version field is read or written -- see each one's
+    docstring for its specific rule about when it's allowed to write.
 """
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, current_app, request, jsonify
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.attributes import flag_modified
 
+from ..email import send_pattern_updated_email
 from ..extensions import db
 from ..models import Pattern, User, UserPatternProgress
 from ..scraper import parse_pattern_html, scrape_pattern_from_url, ScraperError
@@ -30,6 +37,11 @@ def _require_login():
     if not user_id:
         return None, (jsonify({"error": "Unauthorized"}), 401)
     return user_id, None
+
+
+def _can_edit(user: User, pattern: Pattern) -> bool:
+    """Admins can edit any pattern; everyone else only their own uploads."""
+    return user.is_admin or pattern.uploader_id == user.id
 
 
 def _existing_pattern_response(url: str):
@@ -165,6 +177,138 @@ def submit_pattern():
     }), 201
 
 
+@patterns_bp.route("/<int:pattern_id>", methods=["PATCH"])
+def edit_pattern(pattern_id):
+    """
+    Edit a published pattern. Admins can edit any pattern; everyone else
+    only their own uploads (see _can_edit).
+
+    Accepts title/author/materials/abbreviations/instructions -- anything
+    else in the body (original_url, source_site_name, source_domain) is
+    silently ignored rather than validated, since those fields must stay
+    immutable for dedup and attribution integrity.
+
+    If `instructions` actually changes (compared before reassigning, so
+    this is a real content diff, not a self-comparison), bumps
+    instructions_version and emails everyone with meaningful progress on
+    this pattern (see _notify_progress_users) -- this is what the
+    per-user staleness mechanism in UserPatternProgress keys off of.
+    """
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    user = User.query.get(user_id)
+    pattern = Pattern.query.get_or_404(pattern_id)
+    if not _can_edit(user, pattern):
+        return jsonify({"error": "You don't have permission to edit this pattern."}), 403
+
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    if not title:
+        return jsonify({"error": "title is required"}), 400
+
+    new_instructions = data.get("instructions") or {}
+    instructions_changed = new_instructions != (pattern.instructions or {})
+
+    pattern.title = title
+    pattern.author = data.get("author") or None
+    pattern.materials = data.get("materials")
+    pattern.abbreviations = data.get("abbreviations")
+    pattern.instructions = new_instructions
+    if instructions_changed:
+        pattern.instructions_version += 1
+
+    db.session.commit()
+
+    if instructions_changed:
+        _notify_progress_users(pattern, editor_user_id=user_id)
+
+    return jsonify({
+        "message": "Pattern updated.",
+        "pattern": pattern.to_dict(current_user_id=user_id),
+    }), 200
+
+
+def _notify_progress_users(pattern: Pattern, editor_user_id: int) -> None:
+    """
+    Email everyone with meaningful checklist progress on `pattern` that it
+    just changed. Called after instructions_version has already been
+    bumped and committed. Best-effort per recipient -- one failed send
+    (bad address, Resend outage) is logged and skipped, never rolls back
+    the edit or blocks the remaining recipients.
+    """
+    progress_rows = UserPatternProgress.query.filter_by(pattern_id=pattern.id).all()
+    for progress in progress_rows:
+        if progress.user_id == editor_user_id:
+            continue  # no self-notification for your own edit
+        if not progress.has_any_completed_step():
+            continue  # stale-but-empty progress isn't real engagement
+        try:
+            send_pattern_updated_email(progress.user.email, pattern)
+        except Exception:
+            current_app.logger.exception(
+                "Failed to send pattern-updated email to user %s for pattern %s",
+                progress.user_id, pattern.id,
+            )
+
+
+@patterns_bp.route("/notifications", methods=["GET"])
+def pattern_notifications():
+    """
+    Patterns the current user has meaningful, now-stale progress on --
+    drives the in-app "this pattern changed" banner. Read-only: unlike
+    /acknowledge-update, viewing this list doesn't clear anything.
+    """
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    stale = (
+        db.session.query(Pattern, UserPatternProgress)
+        .join(UserPatternProgress, UserPatternProgress.pattern_id == Pattern.id)
+        .filter(
+            UserPatternProgress.user_id == user_id,
+            UserPatternProgress.pattern_version < Pattern.instructions_version,
+        )
+        .all()
+    )
+    return jsonify([
+        {"id": pattern.id, "title": pattern.title}
+        for pattern, progress in stale
+        if progress.has_any_completed_step()
+    ]), 200
+
+
+@patterns_bp.route("/<int:pattern_id>/acknowledge-update", methods=["POST"])
+def acknowledge_pattern_update(pattern_id):
+    """
+    Dismiss the "this pattern changed" banner for one pattern, clearing
+    this user's now-stale checklist progress on it immediately (rather
+    than waiting for their next checkbox click, see toggle_progress).
+
+    Re-checks staleness before writing anything -- if it's not actually
+    stale anymore (e.g. a duplicate call from a second browser tab that
+    already lazily reset via toggle_progress), this is a no-op rather than
+    wiping progress the user may have already re-entered.
+    """
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    pattern = Pattern.query.get_or_404(pattern_id)
+    progress = UserPatternProgress.query.filter_by(
+        user_id=user_id, pattern_id=pattern_id
+    ).first()
+
+    if progress and progress.pattern_version < pattern.instructions_version:
+        progress.completed_steps = {}
+        progress.pattern_version = pattern.instructions_version
+        db.session.commit()
+
+    return jsonify({"message": "Acknowledged."}), 200
+
+
 @patterns_bp.route("/mine", methods=["GET"])
 def my_uploaded_patterns():
     """Patterns this user personally uploaded."""
@@ -241,6 +385,15 @@ def toggle_progress(pattern_id):
     completed_steps is a JSON column, SQLAlchemy can't see in-place mutation
     of the nested dict/list on its own -- flag_modified tells it to persist
     the change on commit (without it, the UPDATE would silently be a no-op).
+
+    A new row is stamped with the pattern's *current* instructions_version
+    (never left at the column default) -- otherwise a pattern edited
+    several times before this user's first-ever checkbox click would look
+    falsely stale immediately. An existing row that IS stale (the pattern
+    was edited since this user last touched it) is wiped before the new
+    toggle is applied -- this is the lazy per-user reset described in
+    UserPatternProgress's docstring, triggered by real interaction rather
+    than a bulk operation at edit time.
     """
     user_id, error = _require_login()
     if error:
@@ -263,13 +416,21 @@ def toggle_progress(pattern_id):
         user_id=user_id, pattern_id=pattern_id
     ).first()
     if progress is None:
-        progress = UserPatternProgress(user_id=user_id, pattern_id=pattern_id, completed_steps={})
+        progress = UserPatternProgress(
+            user_id=user_id,
+            pattern_id=pattern_id,
+            completed_steps={},
+            pattern_version=pattern.instructions_version,
+        )
         db.session.add(progress)
+    elif progress.pattern_version < pattern.instructions_version:
+        progress.completed_steps = {}
+        progress.pattern_version = pattern.instructions_version
 
     flags = progress.completed_steps.get(part) or [False] * step_count
     # Pad defensively in case the part's step count differs from what's
-    # already recorded (shouldn't happen since patterns are immutable, but
-    # cheap to guard against an out-of-sync progress row).
+    # already recorded (shouldn't normally happen now that stale rows are
+    # wiped above, but cheap to guard against regardless).
     if len(flags) < step_count:
         flags = flags + [False] * (step_count - len(flags))
     flags[index] = completed

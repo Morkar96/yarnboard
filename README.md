@@ -47,6 +47,16 @@ hot-reload -- see Local setup below.
   personal -- tracked in a separate `user_pattern_progress` table so one
   person's progress never shows up as completed for anyone else viewing
   the same community pattern.
+- **Editing & permissions**: a pattern's uploader, or a user with
+  `is_admin` set (granted via `flask make-admin <email>`, see Local setup),
+  can edit its title/author/materials/abbreviations/instructions after
+  publishing. Editing `instructions` bumps `Pattern.instructions_version`,
+  which invalidates other users' checklist progress on it -- lazily, per
+  user, not as a bulk reset (see `UserPatternProgress.pattern_version`'s
+  docstring in `backend/app/models.py` for the full mechanism). Affected
+  users see an in-app banner (polled, `frontend/src/components/
+  UpdateBanner.tsx`) and get an email (`backend/app/email.py`, via Resend)
+  the next time a pattern they've engaged with changes.
 - **Frontend** (`frontend/`): Vite + React + TypeScript, React Router,
   a typed API client (`src/api/client.ts`), and a single `AuthContext` for
   the logged-in user. No larger state library -- the app is small enough
@@ -67,8 +77,11 @@ hot-reload -- see Local setup below.
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # leave DATABASE_URL unset to use local SQLite
+cp .env.example .env        # leave DATABASE_URL unset to use local SQLite,
+                             # and RESEND_API_KEY unset to log emails instead
+                             # of sending them
 flask --app wsgi init-db    # creates the tables
+flask --app wsgi make-admin you@example.com  # optional: grant edit-any-pattern rights
 flask --app wsgi run --port 5001
 ```
 
@@ -103,20 +116,40 @@ frontend/backend services) -- Flask serves the built React app itself.
    enter those same two commands yourself -- there's no `rootDir` to set,
    since the build spans both `backend/` and `frontend/`.)
 3. Set the env vars marked `sync: false` in `render.yaml`: `SECRET_KEY`
-   (any long random string) and `DATABASE_URL` (the Neon connection string
-   from step 1). Don't set `VITE_API_BASE_URL` -- leaving it unset is what
-   makes the built frontend call the API with relative, same-origin paths.
+   (any long random string), `DATABASE_URL` (the Neon connection string
+   from step 1), and `RESEND_API_KEY`/`RESEND_FROM_EMAIL` (from
+   [resend.com](https://resend.com) -- pattern-updated emails are just
+   logged instead of sent if these are left unset). Update
+   `PUBLIC_APP_URL` to match this service's actual Render URL (used to
+   build links in emails). Don't set `VITE_API_BASE_URL` -- leaving it
+   unset is what makes the built frontend call the API with relative,
+   same-origin paths.
 4. Run the schema against the Neon database once:
    `DATABASE_URL=<neon-connection-string> flask --app wsgi init-db`
    (run this locally, pointed at the production database, since there's no
-   migration tool in v1 -- see Known limitations).
+   migration tool in v1 -- see Known limitations). If the database already
+   existed before the pattern-editing feature (i.e. you're upgrading, not
+   starting fresh), also run
+   `DATABASE_URL=<neon-connection-string> flask --app wsgi add-versioning-columns`,
+   since `init-db` only creates missing tables, never adds columns to
+   ones that already exist.
+5. Grant yourself edit-any-pattern rights once:
+   `DATABASE_URL=<neon-connection-string> flask --app wsgi make-admin you@example.com`.
 
 ## Known limitations
 
 - The scraper is heuristic and best-effort; it's designed to feed a human
   review step, not to be a guaranteed-correct parser for every pattern site.
 - No email verification on signup.
-- Patterns are immutable after publishing -- there's no edit flow yet, only
-  submit-and-review before that first publish.
+- Editing a pattern invalidates progress pattern-wide, not per-part -- a
+  typo fix in one step resets everyone's checklist on the whole pattern,
+  not just that step. A deliberate trade-off for a simple, lazy
+  invalidation mechanism (see `UserPatternProgress.pattern_version`)
+  rather than a smart per-part merge.
+- No optimistic locking on pattern edits -- last-write-wins if two people
+  somehow edit the same pattern at once (only its uploader and admins can,
+  so this is inherently rare).
 - No migration tool (Alembic, etc.) -- schema setup is a one-off
-  `flask init-db` command, appropriate for the app's current size.
+  `flask init-db` command for new databases, plus a purely-additive
+  `flask add-versioning-columns` command for upgrading an existing one;
+  appropriate for the app's current size and rate of schema change.
