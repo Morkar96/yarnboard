@@ -25,7 +25,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from ..email import send_pattern_updated_email
 from ..extensions import db
 from ..models import Pattern, User, UserPatternProgress
-from ..scraper import parse_pattern_html, scrape_pattern_from_url, ScraperError
+from ..scraper import parse_pattern_html, parse_pattern_pdf, scrape_pattern_from_url, ScraperError
 from ..utils import get_current_user_id
 
 patterns_bp = Blueprint("patterns", __name__, url_prefix="/api/patterns")
@@ -88,17 +88,26 @@ def preview_pattern():
 @patterns_bp.route("/preview-upload", methods=["POST"])
 def preview_pattern_from_upload():
     """
-    Like /preview, but the page's HTML comes from a file the user uploaded
-    instead of being fetched by the server.
+    Like /preview, but the page's content comes from a file the user
+    uploaded instead of being fetched by the server -- either a saved
+    HTML page or a PDF (e.g. a paid Etsy/Ravelry pattern distributed as a
+    PDF, which Yarnboard has no way to "fetch" at all).
 
-    This is the fallback for sites whose bot-detection (e.g. Cloudflare's
-    JS challenge -- see scraper.ScraperError messages) blocks Yarnboard's
-    automatic fetch entirely: the user opens the page in their own
-    browser, saves it, and uploads the saved HTML here. `url` is still
-    required and still used for dedup and attribution -- only the content
-    used for extraction is user-supplied instead of fetched by us.
+    This is also the fallback for sites whose bot-detection (e.g.
+    Cloudflare's JS challenge -- see scraper.ScraperError messages) blocks
+    Yarnboard's automatic fetch entirely: the user opens the page in their
+    own browser, saves it, and uploads the saved HTML here. `url` is still
+    required and still used for dedup and attribution in both cases --
+    only the content used for extraction is user-supplied instead of
+    fetched by us.
 
-    multipart/form-data body: `url` (text field), `html_file` (file field).
+    Which parser runs is decided by sniffing the file's own bytes (a
+    `%PDF-` magic header), not by filename extension or the browser-
+    supplied Content-Type -- both of those are just claims the client
+    makes about the file, not verified facts about it.
+
+    multipart/form-data body: `url` (text field), `html_file` (file field,
+    despite the name also accepts a PDF).
     """
     user_id, error = _require_login()
     if error:
@@ -116,13 +125,14 @@ def preview_pattern_from_upload():
     if duplicate_response:
         return duplicate_response
 
-    try:
-        html = uploaded.read().decode("utf-8", errors="replace")
-    except Exception:
-        return jsonify({"error": "Could not read the uploaded file as text."}), 400
+    raw_bytes = uploaded.read()
 
     try:
-        draft = parse_pattern_html(html, url)
+        if raw_bytes.startswith(b"%PDF-"):
+            draft = parse_pattern_pdf(raw_bytes, url)
+        else:
+            html = raw_bytes.decode("utf-8", errors="replace")
+            draft = parse_pattern_html(html, url)
     except ScraperError as exc:
         return jsonify({"error": str(exc)}), 502
 
