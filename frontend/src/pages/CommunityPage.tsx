@@ -1,14 +1,14 @@
-/** All published patterns, from every user. Public -- no login required to
- * browse, matching the backend's GET /api/patterns/community. */
+/** All published patterns, from every user. Requires login -- gated behind
+ * ProtectedRoute in App.tsx and behind login server-side (see GET
+ * /api/patterns/community), so unregistered visitors can't browse the
+ * community library at all. */
 import { useEffect, useState } from "react";
 import { Col, Row, Spinner } from "react-bootstrap";
 import { fetchCommunityPatterns, fetchMySaved, savePattern, unsavePattern } from "../api/client";
 import PatternCard from "../components/PatternCard";
-import { useAuth } from "../context/AuthContext";
 import type { Pattern } from "../types/models";
 
 export default function CommunityPage() {
-  const { user } = useAuth();
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -17,10 +17,8 @@ export default function CommunityPage() {
     fetchCommunityPatterns()
       .then(setPatterns)
       .finally(() => setLoading(false));
-    if (user) {
-      fetchMySaved().then((saved) => setSavedIds(new Set(saved.map((p) => p.id))));
-    }
-  }, [user]);
+    fetchMySaved().then((saved) => setSavedIds(new Set(saved.map((p) => p.id))));
+  }, []);
 
   async function handleToggleSave(pattern: Pattern) {
     if (savedIds.has(pattern.id)) {
@@ -47,7 +45,7 @@ export default function CommunityPage() {
           <Col key={pattern.id}>
             <PatternCard
               pattern={pattern}
-              onToggleSave={user ? handleToggleSave : undefined}
+              onToggleSave={handleToggleSave}
               isSaved={savedIds.has(pattern.id)}
             />
           </Col>
