@@ -5,6 +5,7 @@ Flask-Cors==4.0.1
 requests==2.32.3
 beautifulsoup4==4.12.3
 python-dotenv==1.0.1
+pdfplumber==0.11.10
 
 # Production server + Neon (Postgres) driver.
 gunicorn==22.0.0

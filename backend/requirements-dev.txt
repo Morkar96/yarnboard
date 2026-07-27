@@ -1,0 +1,5 @@
+# Dev/test-only dependencies, on top of the production set. Not installed
+# on Render -- only requirements.txt is used there (see render.yaml).
+-r requirements.txt
+
+pytest==8.3.3

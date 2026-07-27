@@ -4,8 +4,10 @@
  *
  * Some sites block automatic fetching entirely (e.g. Cloudflare's
  * bot-detection challenge -- see backend/app/scraper.py). When that
- * happens this page offers a fallback: save the page's HTML yourself and
- * upload it, and the same extraction heuristics run against that instead. */
+ * happens this page offers a fallback: upload the page's saved HTML, or a
+ * PDF (e.g. a paid Etsy/Ravelry pattern that only exists as a PDF in the
+ * first place -- there's nothing to "fetch" for those at all), and the
+ * same extraction heuristics run against that instead. */
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Card, Form } from "react-bootstrap";
 import { Link, useNavigate } from "react-router-dom";
@@ -96,16 +98,16 @@ export default function SubmitPatternPage() {
             <p>
               Couldn't fetch that page automatically -- some sites block automated requests. If
               you have the page saved as an HTML file (open it in your browser, then "Save Page
-              As..." / "Save As" and choose "Webpage, HTML only"), you can upload it here
-              instead. The URL above is still used to credit the original source and to avoid
-              duplicates.
+              As..." / "Save As" and choose "Webpage, HTML only"), or the pattern as a PDF (e.g.
+              a paid pattern from Etsy/Ravelry), you can upload it here instead. The URL above is
+              still used to credit the original source and to avoid duplicates.
             </p>
             <Form onSubmit={handleUploadPreview}>
               <Form.Group className="mb-3" controlId="submit-upload-file">
-                <Form.Label>Saved HTML file</Form.Label>
+                <Form.Label>Saved HTML or PDF file</Form.Label>
                 <Form.Control
                   type="file"
-                  accept=".html,.htm,text/html"
+                  accept=".html,.htm,text/html,.pdf,application/pdf"
                   onChange={(e) =>
                     setUploadFile((e.target as HTMLInputElement).files?.[0] ?? null)
                   }
