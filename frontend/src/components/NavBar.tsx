@@ -8,7 +8,10 @@ export default function NavBar() {
 
   async function handleLogout() {
     await logout();
-    navigate("/community");
+    // /community now requires login (ProtectedRoute), so sending a
+    // logged-out user there would just bounce them straight to /login
+    // anyway -- skip the pointless extra redirect.
+    navigate("/login");
   }
 
   return (

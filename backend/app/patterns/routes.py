@@ -369,8 +369,12 @@ def unsave_pattern(pattern_id):
 
 @patterns_bp.route("/community", methods=["GET"])
 def community_patterns():
-    """All published patterns, newest first. Public -- no login required."""
-    user_id = get_current_user_id()
+    """All published patterns, newest first. Requires login -- unregistered
+    visitors shouldn't be able to browse the community library at all."""
+    user_id, error = _require_login()
+    if error:
+        return error
+
     patterns = Pattern.query.order_by(Pattern.created_at.desc()).all()
     return jsonify([p.to_dict(current_user_id=user_id) for p in patterns]), 200
 

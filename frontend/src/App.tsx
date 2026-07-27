@@ -23,7 +23,14 @@ export default function App() {
           <Route path="/" element={<Navigate to="/community" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route path="/community" element={<CommunityPage />} />
+          <Route
+            path="/community"
+            element={
+              <ProtectedRoute>
+                <CommunityPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/pattern/:id" element={<PatternDetailPage />} />
           <Route
             path="/pattern/:id/edit"
