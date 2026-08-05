@@ -87,6 +87,21 @@ class Pattern(db.Model):
     # (last-write-wins on edits, same as every other write path here).
     instructions_version = db.Column(db.Integer, nullable=False, default=1)
 
+    # Photo of the finished/made object. Two mutually-exclusive sources:
+    # `photo_url` is a passthrough external URL found while scraping (never
+    # downloaded/hosted by us); `photo_data`/`photo_content_type` is a
+    # manually-uploaded photo whose bytes live directly in this row (see
+    # backend/app/photo.py for the resize/re-encode step) -- Render's web
+    # service has no persistent disk, so this is the storage mechanism, not
+    # a stopgap. `photo_source` records which one is authoritative so
+    # to_dict() doesn't have to guess from nullability alone. An upload
+    # always replaces a scraped photo (see patterns/routes.py's photo
+    # upload endpoint).
+    photo_source = db.Column(db.String(20), nullable=True)
+    photo_url = db.Column(db.String(1000), nullable=True)
+    photo_data = db.Column(db.LargeBinary, nullable=True)
+    photo_content_type = db.Column(db.String(50), nullable=True)
+
     uploader_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
 
@@ -150,6 +165,16 @@ class Pattern(db.Model):
             "materials": self.materials,
             "abbreviations": self.abbreviations,
             "instructions": instructions_with_progress,
+            # A single opaque URL regardless of source: an uploaded photo is
+            # served from our own streaming route (see GET /<id>/photo in
+            # patterns/routes.py); a scraped photo is the external URL
+            # directly -- no proxying/downloading needed for that case.
+            "photo_url": (
+                f"/api/patterns/{self.id}/photo" if self.photo_data
+                else self.photo_url if self.photo_url
+                else None
+            ),
+            "has_photo": bool(self.photo_data or self.photo_url),
             "uploader": self.uploader.username if self.uploader else "Unknown",
             "uploader_id": self.uploader_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,

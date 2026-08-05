@@ -6,6 +6,7 @@
  */
 import { Button, Card } from "react-bootstrap";
 import { Link } from "react-router-dom";
+import { resolvePhotoUrl } from "../api/client";
 import type { Pattern } from "../types/models";
 import AttributionTag from "./AttributionTag";
 
@@ -19,6 +20,17 @@ interface Props {
 export default function PatternCard({ pattern, onToggleSave, isSaved }: Props) {
   return (
     <Card className="h-100 shadow-sm">
+      {pattern.has_photo && (
+        <Card.Img
+          variant="top"
+          src={resolvePhotoUrl(pattern.photo_url)}
+          alt={pattern.title}
+          style={{ height: "160px", objectFit: "cover" }}
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+          }}
+        />
+      )}
       <Card.Body className="d-flex flex-column">
         <Card.Title as={Link} to={`/pattern/${pattern.id}`} className="link-primary text-decoration-none">
           {pattern.title}

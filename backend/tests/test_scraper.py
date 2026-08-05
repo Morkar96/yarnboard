@@ -10,7 +10,8 @@ instructions given they describe the same pattern.
 
 from pathlib import Path
 
-from app.scraper import parse_pattern_html, parse_pattern_pdf
+from app.scraper import _extract_image_url, parse_pattern_html, parse_pattern_pdf
+from bs4 import BeautifulSoup
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -35,6 +36,8 @@ def test_parse_pattern_html_extracts_structured_pattern():
     assert draft["instructions"]["Part 2: Body"] == [
         "Knit every round until piece measures 6 inches from cast on.",
     ]
+    # The fixture has no og:image/twitter:image meta tag at all.
+    assert draft["photo_url"] is None
 
 
 def test_parse_pattern_pdf_extracts_same_structure_as_html():
@@ -53,6 +56,8 @@ def test_parse_pattern_pdf_extracts_same_structure_as_html():
     # domain of the URL the user typed alongside the upload.
     assert draft["source_domain"] == "example-etsy-shop.test"
     assert draft["source_site_name"] == "example-etsy-shop.test"
+    # PDFs have no og:image equivalent -- always None, never omitted.
+    assert draft["photo_url"] is None
 
 
 def test_parse_pattern_html_degrades_gracefully_on_content_free_page():
@@ -63,3 +68,43 @@ def test_parse_pattern_html_degrades_gracefully_on_content_free_page():
     assert draft["materials"] == ""
     assert draft["abbreviations"] == ""
     assert draft["instructions"] == {}
+    assert draft["photo_url"] is None
+
+
+def test_extract_image_url_prefers_og_image_over_twitter_image():
+    html = """
+    <html><head>
+      <meta property="og:image" content="https://cdn.example.com/photo.jpg">
+      <meta name="twitter:image" content="https://cdn.example.com/other.jpg">
+    </head></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    assert _extract_image_url(soup, "https://example.com/pattern") == "https://cdn.example.com/photo.jpg"
+
+
+def test_extract_image_url_falls_back_to_twitter_image():
+    html = """
+    <html><head>
+      <meta name="twitter:image" content="https://cdn.example.com/other.jpg">
+    </head></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    assert _extract_image_url(soup, "https://example.com/pattern") == "https://cdn.example.com/other.jpg"
+
+
+def test_extract_image_url_resolves_relative_url_against_source():
+    html = """
+    <html><head>
+      <meta property="og:image" content="/images/photo.jpg">
+    </head></html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    assert (
+        _extract_image_url(soup, "https://example.com/blog/pattern")
+        == "https://example.com/images/photo.jpg"
+    )
+
+
+def test_extract_image_url_returns_none_when_no_tag_present():
+    soup = BeautifulSoup("<html><head></head></html>", "html.parser")
+    assert _extract_image_url(soup, "https://example.com/pattern") is None

@@ -14,7 +14,7 @@ Treat every field this module returns as a suggestion, not ground truth.
 
 import io
 import re
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 import pdfplumber
 from bs4 import BeautifulSoup
@@ -125,10 +125,10 @@ def parse_pattern_html(html: str, source_url: str) -> dict:
     `source_url` (for dedup and attribution) is still the URL they typed.
 
     Returns a dict: title, author, materials, abbreviations, instructions
-    ({part_name: [step_text, ...]}), source_site_name, source_domain.
-    Parsing failures degrade gracefully to empty fields rather than
-    raising, since a partially-empty draft is still useful to a user who's
-    willing to fill in the rest by hand.
+    ({part_name: [step_text, ...]}), source_site_name, source_domain,
+    photo_url. Parsing failures degrade gracefully to empty/None fields
+    rather than raising, since a partially-empty draft is still useful to a
+    user who's willing to fill in the rest by hand.
     """
     soup = BeautifulSoup(html, "html.parser")
 
@@ -143,6 +143,7 @@ def parse_pattern_html(html: str, source_url: str) -> dict:
         "instructions": instructions,
         "source_site_name": site_name,
         "source_domain": domain,
+        "photo_url": _extract_image_url(soup, source_url),
     }
 
 
@@ -215,6 +216,9 @@ def parse_pattern_pdf(pdf_bytes: bytes, source_url: str) -> dict:
         "instructions": instructions,
         "source_site_name": domain,
         "source_domain": domain,
+        # PDFs have no og:image equivalent -- always None, never omitted,
+        # so both parsers return the same shape.
+        "photo_url": None,
     }
 
 
@@ -287,6 +291,29 @@ def _get_site_name(soup: BeautifulSoup, url: str) -> tuple[str, str]:
     meta = soup.find("meta", property="og:site_name")
     site_name = meta["content"].strip() if meta and meta.get("content") else domain
     return site_name, domain
+
+
+def _extract_image_url(soup: BeautifulSoup, source_url: str) -> str | None:
+    """
+    Best-effort "photo of the pattern/finished object" for the draft,
+    reusing whatever preview image the page already set up for link
+    unfurling. Priority: `og:image` -> `twitter:image` (a `name=`
+    attribute, unlike the `property=` og: tags). Relative/scheme-relative
+    URLs (common in these tags) are resolved against `source_url` via
+    urljoin so the frontend can drop the result straight into an <img src>.
+    Returns None rather than guessing when neither tag is present -- this
+    is just a draft field the user can review/clear before publishing.
+    """
+    for prop in ("og:image", "og:image:url"):
+        meta = soup.find("meta", property=prop)
+        if meta and meta.get("content"):
+            return urljoin(source_url, meta["content"].strip())
+
+    meta = soup.find("meta", attrs={"name": "twitter:image"})
+    if meta and meta.get("content"):
+        return urljoin(source_url, meta["content"].strip())
+
+    return None
 
 
 def _bare_domain(url: str) -> str:
