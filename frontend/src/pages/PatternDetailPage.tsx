@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { Spinner } from "react-bootstrap";
 import { Link, useParams } from "react-router-dom";
-import { fetchPattern } from "../api/client";
+import { fetchPattern, resolvePhotoUrl } from "../api/client";
 import AttributionTag from "../components/AttributionTag";
 import CollapsibleCard from "../components/CollapsibleCard";
 import PatternChecklist from "../components/PatternChecklist";
@@ -42,6 +42,18 @@ export default function PatternDetailPage() {
         )}
       </div>
       <AttributionTag pattern={pattern} />
+
+      {pattern.has_photo && (
+        <img
+          src={resolvePhotoUrl(pattern.photo_url)}
+          alt={pattern.title}
+          className="mb-3"
+          style={{ maxWidth: "100%", maxHeight: "400px", objectFit: "cover" }}
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+          }}
+        />
+      )}
 
       {pattern.materials && (
         <CollapsibleCard title="Materials">

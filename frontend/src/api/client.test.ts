@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, fetchProfile, login, previewPatternFromUpload } from "./client";
+import { ApiError, fetchProfile, login, previewPatternFromUpload, uploadPatternPhoto } from "./client";
 
 function stubFetchResolvingTo(response: Partial<Response> & { json: () => Promise<unknown> }) {
   const fetchMock = vi.fn().mockResolvedValue(response);
@@ -40,6 +40,24 @@ describe("api client request wrapper", () => {
     const [, options] = fetchMock.mock.calls[0];
     expect(options.body).toBeInstanceOf(FormData);
     expect(options.headers).toBeUndefined();
+  });
+
+  it("posts the photo as multipart form data to the pattern's photo endpoint", async () => {
+    stubFetchResolvingTo({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ message: "Photo updated.", pattern: {} }),
+    });
+    const fetchMock = vi.mocked(fetch);
+    const file = new File(["fake-bytes"], "photo.jpg", { type: "image/jpeg" });
+
+    await uploadPatternPhoto(5, file);
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/api\/patterns\/5\/photo$/);
+    expect(options.method).toBe("POST");
+    expect(options.body).toBeInstanceOf(FormData);
+    expect((options.body as FormData).get("photo")).toBe(file);
   });
 
   it("throws an ApiError carrying the response status and the backend's error message", async () => {
