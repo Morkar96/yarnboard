@@ -85,6 +85,32 @@ def create_app():
             db.session.commit()
         print("Versioning columns added.")
 
+    @app.cli.command("add-photo-columns")
+    def add_photo_columns():
+        """`flask --app wsgi add-photo-columns` -- one-off, idempotent
+        ALTER TABLE for the pattern-photo feature's new columns
+        (Pattern.photo_source, photo_url, photo_data, photo_content_type).
+        Same rationale as add-versioning-columns above: db.create_all()
+        only creates missing tables, never adds columns to a table that
+        already exists, so this is what actually adds them to the live
+        Neon database. Safe to re-run (IF NOT EXISTS). Not needed for a
+        brand-new database -- init-db already creates the columns there."""
+        with app.app_context():
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS photo_source VARCHAR(20)'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS photo_url VARCHAR(1000)'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS photo_data BYTEA'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS photo_content_type VARCHAR(50)'
+            ))
+            db.session.commit()
+        print("Photo columns added.")
+
     @app.cli.command("make-admin")
     @click.argument("email")
     def make_admin(email):

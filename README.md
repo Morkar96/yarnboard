@@ -132,7 +132,9 @@ frontend/backend services) -- Flask serves the built React app itself.
    starting fresh), also run
    `DATABASE_URL=<neon-connection-string> flask --app wsgi add-versioning-columns`,
    since `init-db` only creates missing tables, never adds columns to
-   ones that already exist.
+   ones that already exist. Same deal if the database predates the
+   pattern-photo feature: also run
+   `DATABASE_URL=<neon-connection-string> flask --app wsgi add-photo-columns`.
 5. Grant yourself edit-any-pattern rights once:
    `DATABASE_URL=<neon-connection-string> flask --app wsgi make-admin you@example.com`.
 
@@ -150,6 +152,12 @@ frontend/backend services) -- Flask serves the built React app itself.
   somehow edit the same pattern at once (only its uploader and admins can,
   so this is inherently rare).
 - No migration tool (Alembic, etc.) -- schema setup is a one-off
-  `flask init-db` command for new databases, plus a purely-additive
-  `flask add-versioning-columns` command for upgrading an existing one;
-  appropriate for the app's current size and rate of schema change.
+  `flask init-db` command for new databases, plus purely-additive
+  `flask add-versioning-columns` / `flask add-photo-columns` commands for
+  upgrading an existing one; appropriate for the app's current size and
+  rate of schema change.
+- Manually-uploaded pattern photos are stored as bytes directly in
+  Postgres (re-encoded as JPEG, capped at 1600px/2MB raw upload) rather
+  than a dedicated object store -- simplest option given Render's web
+  service has no persistent disk, at the cost of DB size growing with
+  photo count and no CDN in front of them.

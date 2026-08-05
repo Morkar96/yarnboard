@@ -18,10 +18,11 @@ Endpoints that matter most for correctness:
     docstring for its specific rule about when it's allowed to write.
 """
 
-from flask import Blueprint, current_app, request, jsonify
+from flask import Blueprint, Response, current_app, request, jsonify
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.attributes import flag_modified
 
+from .. import photo
 from ..email import send_pattern_updated_email
 from ..extensions import db
 from ..models import Pattern, User, UserPatternProgress
@@ -170,6 +171,8 @@ def submit_pattern():
         materials=data.get("materials"),
         abbreviations=data.get("abbreviations"),
         instructions=data.get("instructions") or {},
+        photo_url=(data.get("photo_url") or None),
+        photo_source=("scraped" if data.get("photo_url") else None),
         uploader_id=user_id,
     )
     db.session.add(pattern)
@@ -238,6 +241,109 @@ def edit_pattern(pattern_id):
         "message": "Pattern updated.",
         "pattern": pattern.to_dict(current_user_id=user_id),
     }), 200
+
+
+@patterns_bp.route("/<int:pattern_id>/photo", methods=["POST"])
+def upload_pattern_photo(pattern_id):
+    """
+    Upload (or replace) the "photo of the finished object" on an already-
+    published pattern -- works the same whether this pattern already had a
+    scraped photo, a previously-uploaded one, or none at all. Same
+    permission rule as editing the pattern's text (_can_edit): admins can
+    do this on any pattern, everyone else only their own uploads.
+
+    multipart/form-data body: `photo` (file field). The raw upload is
+    capped tighter than the global MAX_CONTENT_LENGTH (see photo.py's
+    MAX_UPLOAD_BYTES) so the error message is accurate for a photo
+    specifically, then normalized (downscaled, re-encoded as JPEG,
+    stripped of EXIF) by photo.process_upload before being stored --
+    see that module's docstring for why.
+
+    A successful upload always replaces any scraped photo_url this pattern
+    had (photo_data takes priority in Pattern.to_dict) -- manual upload is
+    meant to override, not layer behind, whatever scraping found.
+    """
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    user = User.query.get(user_id)
+    pattern = Pattern.query.get_or_404(pattern_id)
+    if not _can_edit(user, pattern):
+        return jsonify({"error": "You don't have permission to edit this pattern."}), 403
+
+    uploaded = request.files.get("photo")
+    if not uploaded or not uploaded.filename:
+        return jsonify({"error": "photo is required"}), 400
+
+    raw_bytes = uploaded.read()
+    if len(raw_bytes) > photo.MAX_UPLOAD_BYTES:
+        max_mb = photo.MAX_UPLOAD_BYTES // (1024 * 1024)
+        return jsonify({"error": f"That photo is too large (max {max_mb}MB)."}), 400
+
+    try:
+        processed = photo.process_upload(raw_bytes)
+    except photo.PhotoError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    pattern.photo_data = processed
+    pattern.photo_content_type = "image/jpeg"
+    pattern.photo_source = "uploaded"
+    pattern.photo_url = None
+    db.session.commit()
+
+    return jsonify({
+        "message": "Photo updated.",
+        "pattern": pattern.to_dict(current_user_id=user_id),
+    }), 200
+
+
+@patterns_bp.route("/<int:pattern_id>/photo", methods=["DELETE"])
+def delete_pattern_photo(pattern_id):
+    """
+    Remove this pattern's photo entirely -- whether it came from scraping
+    or a manual upload. Deliberately clears both sources rather than
+    "falling back" to a previously-scraped photo_url after an uploaded one
+    is removed -- that would be surprising; "remove the photo" should mean
+    no photo, full stop. Same permission rule as upload/edit (_can_edit).
+    """
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    user = User.query.get(user_id)
+    pattern = Pattern.query.get_or_404(pattern_id)
+    if not _can_edit(user, pattern):
+        return jsonify({"error": "You don't have permission to edit this pattern."}), 403
+
+    pattern.photo_data = None
+    pattern.photo_content_type = None
+    pattern.photo_source = None
+    pattern.photo_url = None
+    db.session.commit()
+
+    return jsonify({
+        "message": "Photo removed.",
+        "pattern": pattern.to_dict(current_user_id=user_id),
+    }), 200
+
+
+@patterns_bp.route("/<int:pattern_id>/photo", methods=["GET"])
+def get_pattern_photo(pattern_id):
+    """
+    Stream a manually-uploaded photo's raw bytes. No login required --
+    pattern detail (GET /<id>) is already public, so its photo is too.
+    Only ever the target of Pattern.to_dict()'s "photo_url" field when
+    photo_data is actually set (a scraped photo_url points straight at the
+    external source site instead, never through this route) -- so a 404
+    here means the frontend is acting on stale data, not something to
+    paper over by falling back to anything else.
+    """
+    pattern = Pattern.query.get_or_404(pattern_id)
+    if not pattern.photo_data:
+        return jsonify({"error": "This pattern has no uploaded photo."}), 404
+
+    return Response(pattern.photo_data, mimetype=pattern.photo_content_type or "image/jpeg")
 
 
 def _notify_progress_users(pattern: Pattern, editor_user_id: int) -> None:

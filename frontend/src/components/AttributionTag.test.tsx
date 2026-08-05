@@ -13,6 +13,8 @@ const basePattern: Pattern = {
   materials: null,
   abbreviations: null,
   instructions: {},
+  photo_url: null,
+  has_photo: false,
   uploader: "knitter123",
   uploader_id: 2,
   created_at: null,
