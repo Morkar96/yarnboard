@@ -45,11 +45,9 @@ def create_app():
 
     from .auth.routes import auth_bp
     from .patterns.routes import patterns_bp
-    from .stitch_fiddle.routes import stitch_fiddle_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(patterns_bp)
-    app.register_blueprint(stitch_fiddle_bp)
 
     @app.cli.command("init-db")
     def init_db():
@@ -112,33 +110,6 @@ def create_app():
             ))
             db.session.commit()
         print("Photo columns added.")
-
-    @app.cli.command("add-chart-grid-columns")
-    def add_chart_grid_columns():
-        """`flask --app wsgi add-chart-grid-columns` -- one-off, idempotent
-        ALTER TABLE for the Stitch Fiddle chart-import feature's new
-        columns (Pattern.chart_grid_data, chart_grid_columns,
-        chart_grid_rows, chart_palette). Same rationale as
-        add-photo-columns above: db.create_all() only creates missing
-        tables, never adds columns to a table that already exists, so
-        this is what actually adds them to the live Neon database. Safe
-        to re-run (IF NOT EXISTS). Not needed for a brand-new database --
-        init-db already creates the columns there."""
-        with app.app_context():
-            db.session.execute(db.text(
-                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS chart_grid_data BYTEA'
-            ))
-            db.session.execute(db.text(
-                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS chart_grid_columns INTEGER'
-            ))
-            db.session.execute(db.text(
-                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS chart_grid_rows INTEGER'
-            ))
-            db.session.execute(db.text(
-                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS chart_palette JSON'
-            ))
-            db.session.commit()
-        print("Chart grid columns added.")
 
     @app.cli.command("make-admin")
     @click.argument("email")

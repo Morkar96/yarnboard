@@ -15,7 +15,6 @@ const basePattern: Pattern = {
   instructions: {},
   photo_url: null,
   has_photo: false,
-  chart_grid: null,
   uploader: "knitter123",
   uploader_id: 2,
   created_at: null,

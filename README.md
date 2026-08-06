@@ -135,9 +135,6 @@ frontend/backend services) -- Flask serves the built React app itself.
    ones that already exist. Same deal if the database predates the
    pattern-photo feature: also run
    `DATABASE_URL=<neon-connection-string> flask --app wsgi add-photo-columns`.
-   Same deal again if it predates the Stitch Fiddle chart-import feature:
-   also run
-   `DATABASE_URL=<neon-connection-string> flask --app wsgi add-chart-grid-columns`.
 5. Grant yourself edit-any-pattern rights once:
    `DATABASE_URL=<neon-connection-string> flask --app wsgi make-admin you@example.com`.
 
@@ -156,9 +153,9 @@ frontend/backend services) -- Flask serves the built React app itself.
   so this is inherently rare).
 - No migration tool (Alembic, etc.) -- schema setup is a one-off
   `flask init-db` command for new databases, plus purely-additive
-  `flask add-versioning-columns` / `add-photo-columns` /
-  `add-chart-grid-columns` commands for upgrading an existing one;
-  appropriate for the app's current size and rate of schema change.
+  `flask add-versioning-columns` / `flask add-photo-columns` commands for
+  upgrading an existing one; appropriate for the app's current size and
+  rate of schema change.
 - Manually-uploaded pattern photos are stored as bytes directly in
   Postgres (re-encoded as JPEG, capped at 1600px/2MB raw upload) rather
   than a dedicated object store -- simplest option given Render's web

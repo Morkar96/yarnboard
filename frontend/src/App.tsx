@@ -11,7 +11,6 @@ import MyUploadsPage from "./pages/MyUploadsPage";
 import PatternDetailPage from "./pages/PatternDetailPage";
 import RegisterPage from "./pages/RegisterPage";
 import ReviewPatternPage from "./pages/ReviewPatternPage";
-import StitchFiddlePage from "./pages/StitchFiddlePage";
 import SubmitPatternPage from "./pages/SubmitPatternPage";
 
 export default function App() {
@@ -70,14 +69,6 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <MySavedPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/stitch-fiddle"
-            element={
-              <ProtectedRoute>
-                <StitchFiddlePage />
               </ProtectedRoute>
             }
           />

@@ -7,7 +7,6 @@ import { Link, useParams } from "react-router-dom";
 import { fetchPattern, resolvePhotoUrl } from "../api/client";
 import AttributionTag from "../components/AttributionTag";
 import CollapsibleCard from "../components/CollapsibleCard";
-import PatternChartGrid from "../components/PatternChartGrid";
 import PatternChecklist from "../components/PatternChecklist";
 import { useAuth } from "../context/AuthContext";
 import type { Pattern } from "../types/models";
@@ -44,20 +43,16 @@ export default function PatternDetailPage() {
       </div>
       <AttributionTag pattern={pattern} />
 
-      {pattern.chart_grid ? (
-        <PatternChartGrid grid={pattern.chart_grid} />
-      ) : (
-        pattern.has_photo && (
-          <img
-            src={resolvePhotoUrl(pattern.photo_url)}
-            alt={pattern.title}
-            className="mb-3"
-            style={{ maxWidth: "100%", maxHeight: "400px", objectFit: "cover" }}
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        )
+      {pattern.has_photo && (
+        <img
+          src={resolvePhotoUrl(pattern.photo_url)}
+          alt={pattern.title}
+          className="mb-3"
+          style={{ maxWidth: "100%", maxHeight: "400px", objectFit: "cover" }}
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+          }}
+        />
       )}
 
       {pattern.materials && (

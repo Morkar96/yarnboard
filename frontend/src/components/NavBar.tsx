@@ -37,9 +37,6 @@ export default function NavBar() {
                 <Nav.Link as={Link} to="/saved">
                   My Saved
                 </Nav.Link>
-                <Nav.Link as={Link} to="/stitch-fiddle">
-                  Stitch Fiddle
-                </Nav.Link>
               </>
             )}
           </Nav>
