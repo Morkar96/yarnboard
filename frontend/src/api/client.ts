@@ -19,6 +19,7 @@ import type {
   PatternEditPayload,
   PatternNotification,
   PreviewResponse,
+  StitchFiddleLink,
   User,
 } from "../types/models";
 
@@ -220,5 +221,34 @@ export function toggleProgress(
       method: "PATCH",
       body: JSON.stringify({ part, index, completed }),
     },
+  );
+}
+
+// --- Stitch Fiddle chart import -----------------------------------------
+
+export function fetchStitchFiddleLinks() {
+  return request<StitchFiddleLink[]>("/api/stitch-fiddle/links");
+}
+
+export function saveStitchFiddleLink(shareUrl: string) {
+  return request<StitchFiddleLink>("/api/stitch-fiddle/links", {
+    method: "POST",
+    body: JSON.stringify({ share_url: shareUrl }),
+  });
+}
+
+export function deleteStitchFiddleLink(linkId: number) {
+  return request<{ message: string }>(`/api/stitch-fiddle/links/${linkId}`, {
+    method: "DELETE",
+  });
+}
+
+/** Fetches the chart from Stitch Fiddle (slow -- launches a real headless
+ * browser server-side) and turns it into a Pattern, or returns the
+ * existing one if this link was already imported. */
+export function importStitchFiddleLink(linkId: number) {
+  return request<{ message: string; pattern: Pattern }>(
+    `/api/stitch-fiddle/links/${linkId}/import`,
+    { method: "POST" },
   );
 }
