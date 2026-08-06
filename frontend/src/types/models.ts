@@ -35,9 +35,25 @@ export interface Pattern {
    * for a manually-uploaded one (see Pattern.to_dict in models.py). */
   photo_url: string | null;
   has_photo: boolean;
+  /** A Stitch Fiddle chart's grid, imported via the Stitch Fiddle page --
+   * null for every other pattern. `cells` is row-major, one 0-indexed
+   * `palette` lookup per cell (see PatternChartGrid.tsx). */
+  chart_grid: ChartGrid | null;
   uploader: string;
   uploader_id: number;
   created_at: string | null;
+}
+
+export interface ChartGridPaletteEntry {
+  hex: string;
+  label: string;
+}
+
+export interface ChartGrid {
+  column_count: number;
+  row_count: number;
+  palette: ChartGridPaletteEntry[];
+  cells: number[];
 }
 
 /** One pattern the current user has stale progress on -- drives the
@@ -76,4 +92,15 @@ export interface PreviewResponse {
   duplicate: boolean;
   existing_pattern_id: number | null;
   draft: PatternDraft | null;
+}
+
+/** A saved Stitch Fiddle (stitchfiddle.com) chart share link -- private to
+ * the user who saved it. `imported_pattern_id` is null until "Import" is
+ * clicked; once set, re-importing is a no-op (see the backend route). */
+export interface StitchFiddleLink {
+  id: number;
+  share_url: string;
+  chart_id: string;
+  imported_pattern_id: number | null;
+  created_at: string | null;
 }

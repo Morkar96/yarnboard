@@ -28,7 +28,13 @@
       "Bash(curl -s -m 10 -X POST http://localhost:5001/api/register -H \"Content-Type: application/json\" -d '{\"username\":\"testuser\",\"email\":\"testuser@example.com\",\"password\":\"password123\"}')",
       "Bash(node ./e2e-shot-tmp.mjs)",
       "Bash(curl -s -m 5 -i http://localhost:5001/api/profile)",
-      "Bash(gh pr *)"
+      "Bash(gh pr *)",
+      "Bash(.venv/bin/python3 -m pytest -q tests/test_stitchfiddle.py tests/test_stitch_fiddle_routes.py)",
+      "Bash(.venv/bin/python3 -m pytest -q tests/test_stitch_fiddle_routes.py::test_save_link_rejects_non_stitchfiddle_url -x --tb=long)",
+      "Bash(.venv/bin/python3 -m pytest -q tests/test_stitchfiddle.py tests/test_stitch_fiddle_routes.py -v)",
+      "Bash(.venv/bin/python3 -m pytest tests/test_stitchfiddle.py tests/test_stitch_fiddle_routes.py -v)",
+      "Bash(npx vitest *)",
+      "Bash(.venv/bin/flask --app wsgi add-chart-grid-columns)"
     ]
   }
 }
