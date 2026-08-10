@@ -37,6 +37,17 @@ class User(db.Model):
     # deliberately not a hardcoded email comparison in route logic.
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
 
+    # Login is blocked until this is true (see auth/routes.py's login()).
+    # email_verify_token is the single-use secret mailed in the
+    # verification link; it and its timestamp are cleared once consumed
+    # (or replaced wholesale by /api/resend-verification). The Python-side
+    # default=False only governs ORM inserts -- the add-email-verification-
+    # columns migration in app/__init__.py deliberately backfills existing
+    # rows as *verified*, so this only gates newly-registered accounts.
+    email_verified = db.Column(db.Boolean, nullable=False, default=False)
+    email_verify_token = db.Column(db.String(64), unique=True, nullable=True)
+    email_verify_token_created_at = db.Column(db.DateTime, nullable=True)
+
     # Patterns this user personally submitted (shown on "My Uploads").
     uploaded_patterns = db.relationship("Pattern", backref="uploader", lazy=True)
 
