@@ -140,6 +140,36 @@ def create_app():
             db.session.commit()
         print("Chart grid columns added.")
 
+    @app.cli.command("add-email-verification-columns")
+    def add_email_verification_columns():
+        """`flask --app wsgi add-email-verification-columns` -- one-off,
+        idempotent ALTER TABLE for the email-verification feature's new
+        columns (User.email_verified, email_verify_token,
+        email_verify_token_created_at). Same rationale as
+        add-photo-columns above. email_verified defaults to TRUE in this
+        migration specifically (unlike the model's Python-side default of
+        False) so existing accounts on a live database are grandfathered
+        in as already-verified rather than retroactively locked out of
+        login -- only newly-registered accounts (created through
+        register(), which explicitly passes email_verified=False) start
+        unverified. Safe to re-run (IF NOT EXISTS). Not needed for a
+        brand-new database -- init-db already creates the columns there
+        (with no rows to grandfather, the model's False default is fine)."""
+        with app.app_context():
+            db.session.execute(db.text(
+                'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS email_verified '
+                "BOOLEAN NOT NULL DEFAULT TRUE"
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS email_verify_token VARCHAR(64)'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS '
+                "email_verify_token_created_at TIMESTAMP"
+            ))
+            db.session.commit()
+        print("Email verification columns added.")
+
     @app.cli.command("make-admin")
     @click.argument("email")
     def make_admin(email):
