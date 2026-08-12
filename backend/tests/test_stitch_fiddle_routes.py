@@ -11,7 +11,8 @@ import json
 from pathlib import Path
 
 from app import stitchfiddle
-from app.models import Pattern
+from app.extensions import db
+from app.models import Pattern, User
 
 FIXTURE = json.loads(
     (Path(__file__).parent / "fixtures" / "stitchfiddle-chart-response.json").read_text()
@@ -29,6 +30,13 @@ def _register(client, username):
         json={"username": username, "email": email, "password": "password123"},
     )
     assert resp.status_code == 201
+    # Registration leaves the account unverified (see auth/routes.py); tests
+    # log in right after, so fast-forward verification directly in the DB
+    # rather than parsing the token out of a logged/sent email.
+    with client.application.app_context():
+        user = User.query.filter_by(email=email).first()
+        user.email_verified = True
+        db.session.commit()
     return email
 
 

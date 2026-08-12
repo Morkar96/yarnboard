@@ -1,6 +1,9 @@
 """Regression test for GET /api/patterns/community: unregistered visitors
 must not be able to browse the community pattern library at all."""
 
+from app.extensions import db
+from app.models import User
+
 
 def _register_and_login(client, username):
     email = f"{username}@test.com"
@@ -8,6 +11,13 @@ def _register_and_login(client, username):
         "/api/register",
         json={"username": username, "email": email, "password": "password123"},
     )
+    # Registration leaves the account unverified (see auth/routes.py); this
+    # test logs in immediately after, so fast-forward verification directly
+    # in the DB rather than parsing the token out of a logged/sent email.
+    with client.application.app_context():
+        user = User.query.filter_by(email=email).first()
+        user.email_verified = True
+        db.session.commit()
     client.post("/api/login", json={"email": email, "password": "password123"})
 
 

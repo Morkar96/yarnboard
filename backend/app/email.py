@@ -20,6 +20,43 @@ RESEND_API_URL = "https://api.resend.com/emails"
 REQUEST_TIMEOUT_SECONDS = 10
 
 
+def send_verification_email(to_email: str, username: str, token: str) -> None:
+    """
+    Mail the one-time verification link for a just-registered account.
+    Raises requests.RequestException on delivery failure -- the caller
+    (auth/routes.py's register()/resend_verification()) treats that as
+    non-fatal, since a Resend outage shouldn't fail registration outright
+    when the user can always ask for the link again.
+    """
+    api_key = os.environ.get("RESEND_API_KEY")
+    from_email = os.environ.get("RESEND_FROM_EMAIL", "Yarnboard <notifications@yarnboard.app>")
+    app_url = os.environ.get("PUBLIC_APP_URL", "http://localhost:5173")
+    verify_url = f"{app_url}/verify-email?token={token}"
+
+    subject = "Verify your Yarnboard email"
+    html = (
+        f"<p>Welcome to Yarnboard, <strong>{username}</strong>!</p>"
+        f"<p>Please verify your email address to activate your account.</p>"
+        f'<p><a href="{verify_url}">Verify your email</a></p>'
+        f"<p>This link expires in 24 hours.</p>"
+    )
+
+    if not api_key:
+        current_app.logger.warning(
+            "RESEND_API_KEY not set -- would send verification email to %s: %s",
+            to_email, verify_url,
+        )
+        return
+
+    response = requests.post(
+        RESEND_API_URL,
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={"from": from_email, "to": [to_email], "subject": subject, "html": html},
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+
+
 def send_pattern_updated_email(to_email: str, pattern) -> None:
     """
     Notify `to_email` that `pattern` (a Pattern model instance) has been
