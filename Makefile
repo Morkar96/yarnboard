@@ -8,7 +8,7 @@
 # Local setup) -- run `make install` first on a fresh checkout.
 
 .PHONY: install install-backend install-frontend \
-        dev-backend dev-frontend \
+        dev dev-backend dev-frontend \
         test test-backend test-frontend \
         build build-check
 
@@ -19,6 +19,16 @@ install-backend:
 
 install-frontend:
 	cd frontend && npm install
+
+# Runs both dev servers concurrently (they're foreground processes, so
+# `dev-backend && dev-frontend` would just block forever on the first one
+# and never start the second). The trap ensures Ctrl+C kills both instead
+# of leaving the backend running orphaned in the background.
+dev:
+	@trap 'kill 0' EXIT INT TERM; \
+	$(MAKE) dev-backend & \
+	$(MAKE) dev-frontend & \
+	wait
 
 dev-backend:
 	cd backend && .venv/bin/flask --app wsgi run --port 5001

@@ -6,6 +6,7 @@
  * extraction trustworthy enough to publish.
  */
 import { Button, Card, Form, InputGroup } from "react-bootstrap";
+import { resolvePhotoUrl } from "../api/client";
 import type { PatternDraft } from "../types/models";
 
 interface Props {
@@ -81,6 +82,33 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
         <Form.Label>Title</Form.Label>
         <Form.Control value={draft.title} onChange={(e) => updateField("title", e.target.value)} />
       </Form.Group>
+
+      {draft.photo_url && (
+        <Form.Group controlId="review-photo">
+          <Form.Label>Photo (found automatically)</Form.Label>
+          <div>
+            <img
+              src={resolvePhotoUrl(draft.photo_url)}
+              alt={draft.title}
+              style={{ maxWidth: "240px", maxHeight: "240px", objectFit: "cover" }}
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
+          </div>
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            className="mt-2"
+            onClick={() => updateField("photo_url", null)}
+          >
+            Remove this photo
+          </Button>
+          <Form.Text className="d-block text-muted">
+            You can upload a different photo after publishing, from the pattern's Edit page.
+          </Form.Text>
+        </Form.Group>
+      )}
 
       <Form.Group controlId="review-author">
         <Form.Label>Original author</Form.Label>

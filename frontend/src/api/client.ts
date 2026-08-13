@@ -19,10 +19,30 @@ import type {
   PatternEditPayload,
   PatternNotification,
   PreviewResponse,
+  StitchFiddleLink,
   User,
 } from "../types/models";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+
+/**
+ * Resolve a pattern's `photo_url` for use in an <img src>. Unlike every
+ * other API call, an <img> tag's src is resolved by the *browser* against
+ * the current page's origin, not run through this file's `request()` --
+ * so a same-origin-relative photo_url (an uploaded photo, served from our
+ * own GET /api/patterns/<id>/photo) would silently resolve against the
+ * frontend's own origin instead of the API's. That's harmless in
+ * production (one combined Flask-served origin), but breaks locally,
+ * where the Vite dev server (5173) and Flask (5001) are different
+ * origins -- exactly the scenario BASE_URL exists to handle everywhere
+ * else. A scraped photo_url is already an absolute external URL and must
+ * be left untouched (prepending BASE_URL to an absolute URL would mangle
+ * it), so only same-origin-relative paths get the prefix.
+ */
+export function resolvePhotoUrl(photoUrl: string | null): string | undefined {
+  if (!photoUrl) return undefined;
+  return photoUrl.startsWith("/") ? `${BASE_URL}${photoUrl}` : photoUrl;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -98,6 +118,29 @@ export function previewPatternFromUpload(url: string, htmlFile: File) {
   return request<PreviewResponse>("/api/patterns/preview-upload", {
     method: "POST",
     body: formData,
+  });
+}
+
+/**
+ * Upload (or replace) the photo on an already-published pattern -- works
+ * for a pattern that already had a scraped or previously-uploaded photo,
+ * or one that never had any. Always replaces whatever was there before
+ * (see Pattern.to_dict's priority rule in models.py).
+ */
+export function uploadPatternPhoto(patternId: number, photo: File) {
+  const formData = new FormData();
+  formData.append("photo", photo);
+  return request<{ message: string; pattern: Pattern }>(`/api/patterns/${patternId}/photo`, {
+    method: "POST",
+    body: formData,
+  });
+}
+
+/** Removes this pattern's photo entirely, regardless of whether it was
+ * scraped or manually uploaded. */
+export function deletePatternPhoto(patternId: number) {
+  return request<{ message: string; pattern: Pattern }>(`/api/patterns/${patternId}/photo`, {
+    method: "DELETE",
   });
 }
 
@@ -178,5 +221,34 @@ export function toggleProgress(
       method: "PATCH",
       body: JSON.stringify({ part, index, completed }),
     },
+  );
+}
+
+// --- Stitch Fiddle chart import -----------------------------------------
+
+export function fetchStitchFiddleLinks() {
+  return request<StitchFiddleLink[]>("/api/stitch-fiddle/links");
+}
+
+export function saveStitchFiddleLink(shareUrl: string) {
+  return request<StitchFiddleLink>("/api/stitch-fiddle/links", {
+    method: "POST",
+    body: JSON.stringify({ share_url: shareUrl }),
+  });
+}
+
+export function deleteStitchFiddleLink(linkId: number) {
+  return request<{ message: string }>(`/api/stitch-fiddle/links/${linkId}`, {
+    method: "DELETE",
+  });
+}
+
+/** Fetches the chart from Stitch Fiddle (slow -- launches a real headless
+ * browser server-side) and turns it into a Pattern, or returns the
+ * existing one if this link was already imported. */
+export function importStitchFiddleLink(linkId: number) {
+  return request<{ message: string; pattern: Pattern }>(
+    `/api/stitch-fiddle/links/${linkId}/import`,
+    { method: "POST" },
   );
 }

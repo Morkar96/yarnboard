@@ -37,6 +37,17 @@ class User(db.Model):
     # deliberately not a hardcoded email comparison in route logic.
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
 
+    # Login is blocked until this is true (see auth/routes.py's login()).
+    # email_verify_token is the single-use secret mailed in the
+    # verification link; it and its timestamp are cleared once consumed
+    # (or replaced wholesale by /api/resend-verification). The Python-side
+    # default=False only governs ORM inserts -- the add-email-verification-
+    # columns migration in app/__init__.py deliberately backfills existing
+    # rows as *verified*, so this only gates newly-registered accounts.
+    email_verified = db.Column(db.Boolean, nullable=False, default=False)
+    email_verify_token = db.Column(db.String(64), unique=True, nullable=True)
+    email_verify_token_created_at = db.Column(db.DateTime, nullable=True)
+
     # Patterns this user personally submitted (shown on "My Uploads").
     uploaded_patterns = db.relationship("Pattern", backref="uploader", lazy=True)
 
@@ -86,6 +97,35 @@ class Pattern(db.Model):
     # how it's consumed; deliberately NOT used for edit-conflict detection
     # (last-write-wins on edits, same as every other write path here).
     instructions_version = db.Column(db.Integer, nullable=False, default=1)
+
+    # Photo of the finished/made object. `photo_url` is a passthrough
+    # external URL found while scraping (never downloaded/hosted by us);
+    # `photo_data`/`photo_content_type` is an image whose bytes live
+    # directly in this row (see backend/app/photo.py for the resize/
+    # re-encode step) -- Render's web service has no persistent disk, so
+    # this is the storage mechanism, not a stopgap. `photo_source` records
+    # which one is authoritative so to_dict() doesn't have to guess from
+    # nullability alone: "scraped" (photo_url) or "uploaded" (a user's own
+    # photo of their finished object, via patterns/routes.py's photo
+    # upload endpoint). An upload always replaces whatever photo was
+    # there before.
+    photo_source = db.Column(db.String(20), nullable=True)
+    photo_url = db.Column(db.String(1000), nullable=True)
+    photo_data = db.Column(db.LargeBinary, nullable=True)
+    photo_content_type = db.Column(db.String(50), nullable=True)
+
+    # A Stitch Fiddle chart's grid, imported via stitch_fiddle/routes.py
+    # (see backend/app/stitchfiddle.py for the fetch/decode mechanics).
+    # Deliberately separate from the photo_* columns above -- unlike a
+    # photo, this is structured data (one palette-index byte per cell,
+    # row-major) meant to be rendered as an actual colored <table> on the
+    # frontend (PatternChartGrid.tsx), not a flattened image.
+    # chart_palette is a list of {"hex": "#849c62", "label": "Color 1"} in
+    # the same index order the grid bytes reference.
+    chart_grid_data = db.Column(db.LargeBinary, nullable=True)
+    chart_grid_columns = db.Column(db.Integer, nullable=True)
+    chart_grid_rows = db.Column(db.Integer, nullable=True)
+    chart_palette = db.Column(db.JSON, nullable=True)
 
     uploader_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
@@ -150,6 +190,22 @@ class Pattern(db.Model):
             "materials": self.materials,
             "abbreviations": self.abbreviations,
             "instructions": instructions_with_progress,
+            # A single opaque URL regardless of source: an uploaded photo is
+            # served from our own streaming route (see GET /<id>/photo in
+            # patterns/routes.py); a scraped photo is the external URL
+            # directly -- no proxying/downloading needed for that case.
+            "photo_url": (
+                f"/api/patterns/{self.id}/photo" if self.photo_data
+                else self.photo_url if self.photo_url
+                else None
+            ),
+            "has_photo": bool(self.photo_data or self.photo_url),
+            "chart_grid": {
+                "column_count": self.chart_grid_columns,
+                "row_count": self.chart_grid_rows,
+                "palette": self.chart_palette,
+                "cells": list(self.chart_grid_data),
+            } if self.chart_grid_data else None,
             "uploader": self.uploader.username if self.uploader else "Unknown",
             "uploader_id": self.uploader_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -200,3 +256,46 @@ class UserPatternProgress(db.Model):
         row that's technically stale but represents no real engagement
         (e.g. a saved-but-never-opened pattern)."""
         return any(any(flags) for flags in (self.completed_steps or {}).values())
+
+
+class StitchFiddleLink(db.Model):
+    """
+    A Stitch Fiddle (stitchfiddle.com) chart share link a user has saved,
+    so Yarnboard can turn it into a real Pattern on demand -- see
+    backend/app/stitchfiddle.py for the fetch/decode mechanics and
+    stitch_fiddle/routes.py for the import flow.
+
+    This is private per-user data (closer to UserPatternProgress than to
+    the public, shared Pattern table): only the owning user can see, check,
+    or remove their own saved links. `imported_pattern_id` is null until
+    the user clicks Import; once set, re-importing is a no-op (see the
+    import route) rather than refreshing the Pattern, since the user may
+    have hand-edited the pattern's title/materials/instructions since.
+    """
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    share_url = db.Column(db.String(512), nullable=False)
+    chart_id = db.Column(db.String(80), nullable=False)
+    imported_pattern_id = db.Column(db.Integer, db.ForeignKey("pattern.id"), nullable=True)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+    user = db.relationship("User", backref=db.backref("stitch_fiddle_links", lazy=True))
+    imported_pattern = db.relationship("Pattern")
+
+    __table_args__ = (
+        # Keyed on chart_id, not share_url string equality -- the same
+        # chart is reachable via multiple URL variants (locale-prefixed,
+        # trailing slash), but chart_id (parsed by
+        # stitchfiddle.parse_share_url) is its actual stable identity.
+        db.UniqueConstraint("user_id", "chart_id", name="uq_user_chart_id"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "share_url": self.share_url,
+            "chart_id": self.chart_id,
+            "imported_pattern_id": self.imported_pattern_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }

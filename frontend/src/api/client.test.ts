@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, fetchProfile, login, previewPatternFromUpload } from "./client";
+import {
+  ApiError,
+  deleteStitchFiddleLink,
+  fetchProfile,
+  importStitchFiddleLink,
+  login,
+  previewPatternFromUpload,
+  saveStitchFiddleLink,
+  uploadPatternPhoto,
+} from "./client";
 
 function stubFetchResolvingTo(response: Partial<Response> & { json: () => Promise<unknown> }) {
   const fetchMock = vi.fn().mockResolvedValue(response);
@@ -40,6 +49,71 @@ describe("api client request wrapper", () => {
     const [, options] = fetchMock.mock.calls[0];
     expect(options.body).toBeInstanceOf(FormData);
     expect(options.headers).toBeUndefined();
+  });
+
+  it("posts the photo as multipart form data to the pattern's photo endpoint", async () => {
+    stubFetchResolvingTo({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ message: "Photo updated.", pattern: {} }),
+    });
+    const fetchMock = vi.mocked(fetch);
+    const file = new File(["fake-bytes"], "photo.jpg", { type: "image/jpeg" });
+
+    await uploadPatternPhoto(5, file);
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/api\/patterns\/5\/photo$/);
+    expect(options.method).toBe("POST");
+    expect(options.body).toBeInstanceOf(FormData);
+    expect((options.body as FormData).get("photo")).toBe(file);
+  });
+
+  it("saves a Stitch Fiddle link as a JSON POST", async () => {
+    stubFetchResolvingTo({
+      ok: true,
+      status: 201,
+      json: () => Promise.resolve({ id: 1, share_url: "https://www.stitchfiddle.com/c/abc", chart_id: "abc", imported_pattern_id: null, created_at: null }),
+    });
+    const fetchMock = vi.mocked(fetch);
+
+    await saveStitchFiddleLink("https://www.stitchfiddle.com/c/abc");
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/api\/stitch-fiddle\/links$/);
+    expect(options.method).toBe("POST");
+    expect(JSON.parse(options.body)).toEqual({ share_url: "https://www.stitchfiddle.com/c/abc" });
+  });
+
+  it("deletes a Stitch Fiddle link by id", async () => {
+    stubFetchResolvingTo({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ message: "Link removed." }),
+    });
+    const fetchMock = vi.mocked(fetch);
+
+    await deleteStitchFiddleLink(7);
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/api\/stitch-fiddle\/links\/7$/);
+    expect(options.method).toBe("DELETE");
+  });
+
+  it("imports a Stitch Fiddle link with a POST and no body", async () => {
+    stubFetchResolvingTo({
+      ok: true,
+      status: 201,
+      json: () => Promise.resolve({ message: "Chart imported.", pattern: {} }),
+    });
+    const fetchMock = vi.mocked(fetch);
+
+    await importStitchFiddleLink(7);
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/api\/stitch-fiddle\/links\/7\/import$/);
+    expect(options.method).toBe("POST");
+    expect(options.body).toBeUndefined();
   });
 
   it("throws an ApiError carrying the response status and the backend's error message", async () => {

@@ -45,9 +45,11 @@ def create_app():
 
     from .auth.routes import auth_bp
     from .patterns.routes import patterns_bp
+    from .stitch_fiddle.routes import stitch_fiddle_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(patterns_bp)
+    app.register_blueprint(stitch_fiddle_bp)
 
     @app.cli.command("init-db")
     def init_db():
@@ -84,6 +86,89 @@ def create_app():
             ))
             db.session.commit()
         print("Versioning columns added.")
+
+    @app.cli.command("add-photo-columns")
+    def add_photo_columns():
+        """`flask --app wsgi add-photo-columns` -- one-off, idempotent
+        ALTER TABLE for the pattern-photo feature's new columns
+        (Pattern.photo_source, photo_url, photo_data, photo_content_type).
+        Same rationale as add-versioning-columns above: db.create_all()
+        only creates missing tables, never adds columns to a table that
+        already exists, so this is what actually adds them to the live
+        Neon database. Safe to re-run (IF NOT EXISTS). Not needed for a
+        brand-new database -- init-db already creates the columns there."""
+        with app.app_context():
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS photo_source VARCHAR(20)'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS photo_url VARCHAR(1000)'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS photo_data BYTEA'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS photo_content_type VARCHAR(50)'
+            ))
+            db.session.commit()
+        print("Photo columns added.")
+
+    @app.cli.command("add-chart-grid-columns")
+    def add_chart_grid_columns():
+        """`flask --app wsgi add-chart-grid-columns` -- one-off, idempotent
+        ALTER TABLE for the Stitch Fiddle chart-import feature's new
+        columns (Pattern.chart_grid_data, chart_grid_columns,
+        chart_grid_rows, chart_palette). Same rationale as
+        add-photo-columns above: db.create_all() only creates missing
+        tables, never adds columns to a table that already exists, so
+        this is what actually adds them to the live Neon database. Safe
+        to re-run (IF NOT EXISTS). Not needed for a brand-new database --
+        init-db already creates the columns there."""
+        with app.app_context():
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS chart_grid_data BYTEA'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS chart_grid_columns INTEGER'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS chart_grid_rows INTEGER'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS chart_palette JSON'
+            ))
+            db.session.commit()
+        print("Chart grid columns added.")
+
+    @app.cli.command("add-email-verification-columns")
+    def add_email_verification_columns():
+        """`flask --app wsgi add-email-verification-columns` -- one-off,
+        idempotent ALTER TABLE for the email-verification feature's new
+        columns (User.email_verified, email_verify_token,
+        email_verify_token_created_at). Same rationale as
+        add-photo-columns above. email_verified defaults to TRUE in this
+        migration specifically (unlike the model's Python-side default of
+        False) so existing accounts on a live database are grandfathered
+        in as already-verified rather than retroactively locked out of
+        login -- only newly-registered accounts (created through
+        register(), which explicitly passes email_verified=False) start
+        unverified. Safe to re-run (IF NOT EXISTS). Not needed for a
+        brand-new database -- init-db already creates the columns there
+        (with no rows to grandfather, the model's False default is fine)."""
+        with app.app_context():
+            db.session.execute(db.text(
+                'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS email_verified '
+                "BOOLEAN NOT NULL DEFAULT TRUE"
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS email_verify_token VARCHAR(64)'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS '
+                "email_verify_token_created_at TIMESTAMP"
+            ))
+            db.session.commit()
+        print("Email verification columns added.")
 
     @app.cli.command("make-admin")
     @click.argument("email")
