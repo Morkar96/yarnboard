@@ -29,5 +29,9 @@
     "typescript": "^5.5.4",
     "vite": "^5.4.2",
     "vitest": "^4.1.10"
+  },
+  "allowScripts": {
+    "esbuild@0.21.5": true,
+    "fsevents@2.3.3": true
   }
 }
