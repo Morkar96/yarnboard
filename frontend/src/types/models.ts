@@ -39,9 +39,40 @@ export interface Pattern {
    * null for every other pattern. `cells` is row-major, one 0-indexed
    * `palette` lookup per cell (see PatternChartGrid.tsx). */
   chart_grid: ChartGrid | null;
+  translations: PatternTranslations;
   uploader: string;
   uploader_id: number;
   created_at: string | null;
+}
+
+/** One instructions part's Hebrew translation. Keyed in
+ * HebrewTranslation.instructions by the *same* English part-name string
+ * used in Pattern.instructions -- never a translated key -- because
+ * checklist progress (toggleProgress) is keyed by that English part
+ * name; see Pattern.instructions_he's docstring in backend/app/models.py.
+ * `steps_he` is always the same length as the corresponding English
+ * steps array, matched by index the same way PatternStep is. */
+export interface HebrewInstructionEntry {
+  heading_he: string;
+  steps_he: string[];
+}
+
+export interface HebrewTranslation {
+  title: string;
+  materials: string | null;
+  abbreviations: string | null;
+  instructions: Record<string, HebrewInstructionEntry>;
+  /** False until a human (uploader or admin) has confirmed the
+   * auto-translation via an edit -- see PATCH /api/patterns/<id>. */
+  reviewed: boolean;
+}
+
+/** null until POST /api/patterns/<id>/translate has been run at least
+ * once for this pattern. Only "he" exists today -- shaped as a map keyed
+ * by language so a second language could be added later without
+ * reshaping this type. */
+export interface PatternTranslations {
+  he: HebrewTranslation | null;
 }
 
 export interface ChartGridPaletteEntry {
@@ -66,11 +97,25 @@ export interface PatternNotification {
 /** Fields editable on an already-published pattern (see PATCH
  * /api/patterns/<id>). original_url/source_site_name/source_domain stay
  * immutable for dedup + attribution integrity, so they're not part of
- * this type at all. */
+ * this type at all.
+ *
+ * The title_he/materials_he/abbreviations_he/instructions_he fields are
+ * optional and only sent when the uploader/an admin is also editing the
+ * Hebrew translation in the same request -- omitting `instructions_he`
+ * entirely leaves any existing translation untouched server-side (see
+ * edit_pattern's docstring in backend/app/patterns/routes.py). When
+ * present, instructions_he must have exactly the same keys as
+ * `instructions` and each entry's steps_he the same length as its
+ * English counterpart, or the backend rejects the whole request. */
 export type PatternEditPayload = Pick<
   PatternDraft,
   "title" | "author" | "materials" | "abbreviations" | "instructions"
->;
+> & {
+  title_he?: string;
+  materials_he?: string | null;
+  abbreviations_he?: string | null;
+  instructions_he?: Record<string, HebrewInstructionEntry>;
+};
 
 /** The editable, not-yet-saved draft returned by POST /api/patterns/preview.
  * Instructions here are plain strings (no per-user completed flag yet --

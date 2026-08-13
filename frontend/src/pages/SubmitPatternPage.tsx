@@ -10,11 +10,15 @@
  * same extraction heuristics run against that instead. */
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Card, Form } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
-import { ApiError, previewPattern, previewPatternFromUpload } from "../api/client";
+import { previewPattern, previewPatternFromUpload } from "../api/client";
+import { useApiErrorMessage } from "../i18n/useApiErrorMessage";
 
 export default function SubmitPatternPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const getErrorMessage = useApiErrorMessage();
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,11 +43,7 @@ export default function SubmitPatternPage() {
     try {
       goToReview(await previewPattern(url));
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : "Could not fetch that page. Check the URL and try again.",
-      );
+      setError(getErrorMessage(err, t("submit.genericFetchError")));
       // Any preview failure (blocked by bot-detection, timed out, DNS
       // error, etc.) can potentially be worked around by uploading the
       // page's HTML yourself instead, so always offer it here rather than
@@ -62,7 +62,7 @@ export default function SubmitPatternPage() {
     try {
       goToReview(await previewPatternFromUpload(url, uploadFile));
     } catch (err) {
-      setUploadError(err instanceof ApiError ? err.message : "Could not process that file.");
+      setUploadError(getErrorMessage(err, t("submit.genericUploadError")));
     } finally {
       setUploadLoading(false);
     }
@@ -70,41 +70,32 @@ export default function SubmitPatternPage() {
 
   return (
     <div>
-      <h1 className="mb-3">Submit a Pattern</h1>
-      <p className="text-muted">
-        Paste a link to a knitting or crochet pattern webpage. We'll pull out the title,
-        materials, abbreviations, and instructions for you to review before publishing.
-      </p>
+      <h1 className="mb-3">{t("submit.title")}</h1>
+      <p className="text-muted">{t("submit.intro")}</p>
       <Form onSubmit={handleSubmit} className="mb-2" style={{ maxWidth: "32rem" }}>
         <Form.Group className="mb-3" controlId="submit-url">
-          <Form.Label>Pattern URL</Form.Label>
+          <Form.Label>{t("submit.urlLabel")}</Form.Label>
           <Form.Control
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://example.com/my-pattern"
+            placeholder={t("submit.urlPlaceholder")}
             required
           />
         </Form.Group>
         {error && <Alert variant="danger">{error}</Alert>}
         <Button type="submit" variant="primary" disabled={loading}>
-          {loading ? "Fetching..." : "Preview"}
+          {loading ? t("submit.fetching") : t("submit.previewButton")}
         </Button>
       </Form>
 
       {offerUpload && (
         <Card className="shadow-sm my-4" style={{ maxWidth: "32rem" }}>
           <Card.Body>
-            <p>
-              Couldn't fetch that page automatically -- some sites block automated requests. If
-              you have the page saved as an HTML file (open it in your browser, then "Save Page
-              As..." / "Save As" and choose "Webpage, HTML only"), or the pattern as a PDF (e.g.
-              a paid pattern from Etsy/Ravelry), you can upload it here instead. The URL above is
-              still used to credit the original source and to avoid duplicates.
-            </p>
+            <p>{t("submit.uploadFallbackIntro")}</p>
             <Form onSubmit={handleUploadPreview}>
               <Form.Group className="mb-3" controlId="submit-upload-file">
-                <Form.Label>Saved HTML or PDF file</Form.Label>
+                <Form.Label>{t("submit.uploadFileLabel")}</Form.Label>
                 <Form.Control
                   type="file"
                   accept=".html,.htm,text/html,.pdf,application/pdf"
@@ -116,7 +107,7 @@ export default function SubmitPatternPage() {
               </Form.Group>
               {uploadError && <Alert variant="danger">{uploadError}</Alert>}
               <Button type="submit" variant="outline-primary" disabled={uploadLoading || !uploadFile}>
-                {uploadLoading ? "Processing..." : "Preview from file"}
+                {uploadLoading ? t("submit.processing") : t("submit.uploadButton")}
               </Button>
             </Form>
           </Card.Body>
@@ -124,8 +115,8 @@ export default function SubmitPatternPage() {
       )}
 
       <p className="text-muted">
-        Already have this pattern saved? Check the <Link to="/community">Community</Link> page
-        first -- Yarnboard avoids storing the same source URL twice.
+        {t("submit.alreadyHaveIntro")} <Link to="/community">{t("submit.communityPage")}</Link>{" "}
+        {t("submit.alreadyHaveTail")}
       </p>
     </div>
   );

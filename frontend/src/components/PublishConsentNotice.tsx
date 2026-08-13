@@ -5,6 +5,7 @@
  * whole community, not just saved privately.
  */
 import { Alert, Form } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   acknowledged: boolean;
@@ -12,18 +13,17 @@ interface Props {
 }
 
 export default function PublishConsentNotice({ acknowledged, onAcknowledgeChange }: Props) {
+  const { t } = useTranslation();
+
   return (
     <Alert variant="warning" className="my-4">
       <p className="mb-3">
-        <strong>Publishing to Yarnboard:</strong> this pattern will be saved to the shared
-        Yarnboard community library and visible to all users, along with your username and a
-        link back to the original source. Please only submit patterns you have the right to
-        share, and review the extracted content above for accuracy before publishing.
+        <strong>{t("publishConsent.introLead")}</strong> {t("publishConsent.intro")}
       </p>
       <Form.Check
         type="checkbox"
         id="publish-consent"
-        label="I understand this pattern will be published publicly."
+        label={t("publishConsent.checkboxLabel")}
         checked={acknowledged}
         onChange={(e) => onAcknowledgeChange(e.target.checked)}
       />

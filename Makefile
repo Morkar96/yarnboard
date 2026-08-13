@@ -8,7 +8,7 @@
 # Local setup) -- run `make install` first on a fresh checkout.
 
 .PHONY: install install-backend install-frontend \
-        dev dev-backend dev-frontend \
+        dev dev-backend dev-frontend down \
         test test-backend test-frontend \
         build build-check
 
@@ -35,6 +35,18 @@ dev-backend:
 
 dev-frontend:
 	cd frontend && npm run dev
+
+# `dev`'s Ctrl+C trap only fires for the shell that ran it in the
+# foreground -- a `make dev` backgrounded/detached (or a terminal closed
+# out from under it) leaves the Flask and Vite processes running with
+# nothing left to catch the signal. Kill by port rather than by process
+# name (`flask`/`node`) so this can't take out an unrelated process that
+# happens to share those names; 5001/5173 are hardcoded to this app's dev
+# servers (see dev-backend above and frontend/vite.config.ts).
+down:
+	@echo "Stopping Yarnboard dev servers (ports 5001, 5173)..."
+	@-lsof -ti :5001 -ti :5173 | xargs kill 2>/dev/null
+	@echo "Done."
 
 test: test-backend test-frontend
 

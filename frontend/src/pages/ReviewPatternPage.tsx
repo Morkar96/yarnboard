@@ -4,10 +4,12 @@
  * never persisted anywhere until Publish is clicked. */
 import { useState } from "react";
 import { Alert, Button } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { ApiError, submitPattern } from "../api/client";
+import { submitPattern } from "../api/client";
 import PatternReviewForm from "../components/PatternReviewForm";
 import PublishConsentNotice from "../components/PublishConsentNotice";
+import { useApiErrorMessage } from "../i18n/useApiErrorMessage";
 import type { PatternDraft } from "../types/models";
 
 interface LocationState {
@@ -18,6 +20,8 @@ interface LocationState {
 export default function ReviewPatternPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const getErrorMessage = useApiErrorMessage();
   const state = location.state as LocationState | null;
 
   const [draft, setDraft] = useState<PatternDraft | null>(state?.draft ?? null);
@@ -39,7 +43,7 @@ export default function ReviewPatternPage() {
       const result = await submitPattern({ ...draft, original_url: state!.originalUrl });
       navigate(`/pattern/${result.pattern.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Publishing failed.");
+      setError(getErrorMessage(err, t("review.publishFailed")));
     } finally {
       setPublishing(false);
     }
@@ -47,13 +51,13 @@ export default function ReviewPatternPage() {
 
   return (
     <div>
-      <h1 className="mb-2">Review before publishing</h1>
-      <p className="text-muted">Source: {state.originalUrl}</p>
+      <h1 className="mb-2">{t("review.title")}</h1>
+      <p className="text-muted">{t("review.sourceLabel", { url: state.originalUrl })}</p>
       <PatternReviewForm draft={draft} onChange={setDraft} />
       <PublishConsentNotice acknowledged={acknowledged} onAcknowledgeChange={setAcknowledged} />
       {error && <Alert variant="danger">{error}</Alert>}
       <Button variant="primary" disabled={!acknowledged || publishing} onClick={handlePublish}>
-        {publishing ? "Publishing..." : "Publish Pattern"}
+        {publishing ? t("review.publishing") : t("review.publishButton")}
       </Button>
     </div>
   );

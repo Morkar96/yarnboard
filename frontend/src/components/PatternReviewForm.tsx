@@ -6,6 +6,7 @@
  * extraction trustworthy enough to publish.
  */
 import { Button, Card, Form, InputGroup } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 import { resolvePhotoUrl } from "../api/client";
 import type { PatternDraft } from "../types/models";
 
@@ -15,6 +16,8 @@ interface Props {
 }
 
 export default function PatternReviewForm({ draft, onChange }: Props) {
+  const { t } = useTranslation();
+
   function updateField<K extends keyof PatternDraft>(field: K, value: PatternDraft[K]) {
     onChange({ ...draft, [field]: value });
   }
@@ -79,13 +82,13 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
   return (
     <div className="d-flex flex-column gap-3">
       <Form.Group controlId="review-title">
-        <Form.Label>Title</Form.Label>
+        <Form.Label>{t("reviewForm.titleLabel")}</Form.Label>
         <Form.Control value={draft.title} onChange={(e) => updateField("title", e.target.value)} />
       </Form.Group>
 
       {draft.photo_url && (
         <Form.Group controlId="review-photo">
-          <Form.Label>Photo (found automatically)</Form.Label>
+          <Form.Label>{t("reviewForm.photoLabel")}</Form.Label>
           <div>
             <img
               src={resolvePhotoUrl(draft.photo_url)}
@@ -102,25 +105,23 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
             className="mt-2"
             onClick={() => updateField("photo_url", null)}
           >
-            Remove this photo
+            {t("reviewForm.removePhoto")}
           </Button>
-          <Form.Text className="d-block text-muted">
-            You can upload a different photo after publishing, from the pattern's Edit page.
-          </Form.Text>
+          <Form.Text className="d-block text-muted">{t("reviewForm.photoHint")}</Form.Text>
         </Form.Group>
       )}
 
       <Form.Group controlId="review-author">
-        <Form.Label>Original author</Form.Label>
+        <Form.Label>{t("reviewForm.authorLabel")}</Form.Label>
         <Form.Control
           value={draft.author ?? ""}
-          placeholder="Unknown"
+          placeholder={t("reviewForm.authorPlaceholder")}
           onChange={(e) => updateField("author", e.target.value || null)}
         />
       </Form.Group>
 
       <Form.Group controlId="review-materials">
-        <Form.Label>Materials</Form.Label>
+        <Form.Label>{t("reviewForm.materialsLabel")}</Form.Label>
         <Form.Control
           as="textarea"
           rows={3}
@@ -130,7 +131,7 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
       </Form.Group>
 
       <Form.Group controlId="review-abbreviations">
-        <Form.Label>Abbreviations</Form.Label>
+        <Form.Label>{t("reviewForm.abbreviationsLabel")}</Form.Label>
         <Form.Control
           as="textarea"
           rows={3}
@@ -139,7 +140,7 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
         />
       </Form.Group>
 
-      <h5 className="mt-2">Instructions</h5>
+      <h5 className="mt-2">{t("reviewForm.instructionsHeading")}</h5>
       {Object.entries(draft.instructions).map(([part, steps], partIndex, allParts) => (
         <Card key={part} className="shadow-sm">
           <Card.Body className="d-flex flex-column gap-2">
@@ -148,8 +149,8 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
                 variant="outline-secondary"
                 onClick={() => movePart(part, -1)}
                 disabled={partIndex === 0}
-                title="Move part up"
-                aria-label={`Move part "${part}" up`}
+                title={t("reviewForm.movePartUp")}
+                aria-label={t("reviewForm.movePartUpAria", { part })}
               >
                 &uarr;
               </Button>
@@ -157,8 +158,8 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
                 variant="outline-secondary"
                 onClick={() => movePart(part, 1)}
                 disabled={partIndex === allParts.length - 1}
-                title="Move part down"
-                aria-label={`Move part "${part}" down`}
+                title={t("reviewForm.movePartDown")}
+                aria-label={t("reviewForm.movePartDownAria", { part })}
               >
                 &darr;
               </Button>
@@ -170,10 +171,10 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
               <Button
                 variant="outline-danger"
                 onClick={() => deletePart(part)}
-                title="Delete this part"
-                aria-label={`Delete part "${part}"`}
+                title={t("reviewForm.deletePart")}
+                aria-label={t("reviewForm.deletePartAria", { part })}
               >
-                Delete part
+                {t("reviewForm.deletePart")}
               </Button>
             </InputGroup>
             {steps.map((step, index) => (
@@ -182,21 +183,21 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
                 <Button
                   variant="outline-secondary"
                   onClick={() => deleteStep(part, index)}
-                  title="Delete this step"
-                  aria-label={`Delete step ${index + 1} of "${part}"`}
+                  title={t("reviewForm.deleteStepAria", { number: index + 1, part })}
+                  aria-label={t("reviewForm.deleteStepAria", { number: index + 1, part })}
                 >
                   &times;
                 </Button>
               </InputGroup>
             ))}
             <Button variant="outline-primary" size="sm" className="align-self-start" onClick={() => addStep(part)}>
-              + Add step
+              {t("reviewForm.addStep")}
             </Button>
           </Card.Body>
         </Card>
       ))}
       <Button variant="outline-primary" className="align-self-start" onClick={addPart}>
-        + Add part
+        {t("reviewForm.addPart")}
       </Button>
     </div>
   );

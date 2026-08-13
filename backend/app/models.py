@@ -127,6 +127,32 @@ class Pattern(db.Model):
     chart_grid_rows = db.Column(db.Integer, nullable=True)
     chart_palette = db.Column(db.JSON, nullable=True)
 
+    # Hebrew translation, populated on-demand via POST /<id>/translate (see
+    # patterns/routes.py) rather than at submit time -- a pattern nobody
+    # ever views in Hebrew never costs a translation API call.
+    #
+    # instructions_he is keyed by the *exact same keys* as `instructions`
+    # (English part names) -- never translated keys of its own. Each value
+    # is {"heading_he": str, "steps_he": [str, ...]}, with steps_he the
+    # same length as the corresponding English steps list. This is
+    # deliberate: UserPatternProgress.completed_steps and toggle_progress
+    # (see below, and patterns/routes.py) key checklist progress by the
+    # English part name string, so a Hebrew-mode checklist looks up
+    # instructions_he[part] purely for display text while still reporting
+    # progress against the same English `part`/index the English view
+    # would use. If instructions_he ever had its own translated keys,
+    # Hebrew-mode progress would have nothing compatible to attach to.
+    # The edit endpoint enforces this shape (same keys, same list lengths)
+    # rather than trusting it.
+    title_he = db.Column(db.String(200), nullable=True)
+    materials_he = db.Column(db.Text, nullable=True)
+    abbreviations_he = db.Column(db.Text, nullable=True)
+    instructions_he = db.Column(db.JSON, nullable=True)
+    # False until a human (uploader or admin) has confirmed the
+    # auto-translation -- see _validate_instructions_he in
+    # patterns/routes.py's edit_pattern, which is what flips this True.
+    translation_reviewed = db.Column(db.Boolean, nullable=False, default=False)
+
     uploader_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
 
@@ -206,6 +232,15 @@ class Pattern(db.Model):
                 "palette": self.chart_palette,
                 "cells": list(self.chart_grid_data),
             } if self.chart_grid_data else None,
+            "translations": {
+                "he": {
+                    "title": self.title_he,
+                    "materials": self.materials_he,
+                    "abbreviations": self.abbreviations_he,
+                    "instructions": self.instructions_he,
+                    "reviewed": self.translation_reviewed,
+                } if self.title_he else None,
+            },
             "uploader": self.uploader.username if self.uploader else "Unknown",
             "uploader_id": self.uploader_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,

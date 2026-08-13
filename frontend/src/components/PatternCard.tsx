@@ -5,6 +5,7 @@
  * just on its detail page.
  */
 import { Button, Card } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { resolvePhotoUrl } from "../api/client";
 import type { Pattern } from "../types/models";
@@ -18,13 +19,18 @@ interface Props {
 }
 
 export default function PatternCard({ pattern, onToggleSave, isSaved }: Props) {
+  const { t, i18n } = useTranslation();
+  // Falls back to the English title for patterns that haven't been
+  // translated yet -- see Pattern.translations in types/models.ts.
+  const title = (i18n.language === "he" && pattern.translations.he?.title) || pattern.title;
+
   return (
     <Card className="h-100 shadow-sm">
       {pattern.has_photo && (
         <Card.Img
           variant="top"
           src={resolvePhotoUrl(pattern.photo_url)}
-          alt={pattern.title}
+          alt={title}
           style={{ height: "160px", objectFit: "cover" }}
           onError={(e) => {
             e.currentTarget.style.display = "none";
@@ -33,7 +39,7 @@ export default function PatternCard({ pattern, onToggleSave, isSaved }: Props) {
       )}
       <Card.Body className="d-flex flex-column">
         <Card.Title as={Link} to={`/pattern/${pattern.id}`} className="link-primary text-decoration-none">
-          {pattern.title}
+          {title}
         </Card.Title>
         <AttributionTag pattern={pattern} />
         {onToggleSave && (
@@ -43,7 +49,7 @@ export default function PatternCard({ pattern, onToggleSave, isSaved }: Props) {
             className="mt-auto align-self-start"
             onClick={() => onToggleSave(pattern)}
           >
-            {isSaved ? "Remove from Saved" : "Save"}
+            {isSaved ? t("patternCard.removeSaved") : t("patternCard.save")}
           </Button>
         )}
       </Card.Body>
