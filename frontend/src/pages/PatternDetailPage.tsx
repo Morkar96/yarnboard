@@ -1,6 +1,7 @@
 /** Full pattern view: materials, abbreviations, attribution, and the
- * interactive per-user checklist (PatternChecklist). Public to view; the
- * checklist itself only accepts input from logged-in users. */
+ * interactive per-user checklist (PatternChecklist). Fully public --
+ * anonymous viewers can use the checklist too, just cached to their own
+ * browser instead of synced to an account (see PatternChecklist). */
 import { useEffect, useState } from "react";
 import { Spinner } from "react-bootstrap";
 import { Link, useParams } from "react-router-dom";

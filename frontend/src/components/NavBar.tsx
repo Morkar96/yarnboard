@@ -8,10 +8,7 @@ export default function NavBar() {
 
   async function handleLogout() {
     await logout();
-    // /community now requires login (ProtectedRoute), so sending a
-    // logged-out user there would just bounce them straight to /login
-    // anyway -- skip the pointless extra redirect.
-    navigate("/login");
+    navigate("/community");
   }
 
   return (
@@ -26,11 +23,11 @@ export default function NavBar() {
             <Nav.Link as={Link} to="/community">
               Community
             </Nav.Link>
+            <Nav.Link as={Link} to="/submit">
+              Submit a Pattern
+            </Nav.Link>
             {user && (
               <>
-                <Nav.Link as={Link} to="/submit">
-                  Submit a Pattern
-                </Nav.Link>
                 <Nav.Link as={Link} to="/mine">
                   My Uploads
                 </Nav.Link>

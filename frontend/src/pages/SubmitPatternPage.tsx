@@ -7,13 +7,21 @@
  * happens this page offers a fallback: upload the page's saved HTML, or a
  * PDF (e.g. a paid Etsy/Ravelry pattern that only exists as a PDF in the
  * first place -- there's nothing to "fetch" for those at all), and the
- * same extraction heuristics run against that instead. */
+ * same extraction heuristics run against that instead.
+ *
+ * This page itself is public (unregistered visitors can read how
+ * uploading works), but the actual scrape/submit endpoints all require
+ * login server-side -- so anonymous visitors see the explanation plus a
+ * login/register prompt instead of the live form, rather than being able
+ * to fill it out and only find out it's blocked at the end. */
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Card, Form } from "react-bootstrap";
 import { Link, useNavigate } from "react-router-dom";
 import { ApiError, previewPattern, previewPatternFromUpload } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
 export default function SubmitPatternPage() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -73,60 +81,76 @@ export default function SubmitPatternPage() {
       <h1 className="mb-3">Submit a Pattern</h1>
       <p className="text-muted">
         Paste a link to a knitting or crochet pattern webpage. We'll pull out the title,
-        materials, abbreviations, and instructions for you to review before publishing.
+        materials, abbreviations, and instructions for you to review before publishing. If a site
+        blocks automatic fetching, you can upload a saved copy of the page (or a PDF) instead --
+        either way, you'll review and can edit everything before it's published.
       </p>
-      <Form onSubmit={handleSubmit} className="mb-2" style={{ maxWidth: "32rem" }}>
-        <Form.Group className="mb-3" controlId="submit-url">
-          <Form.Label>Pattern URL</Form.Label>
-          <Form.Control
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://example.com/my-pattern"
-            required
-          />
-        </Form.Group>
-        {error && <Alert variant="danger">{error}</Alert>}
-        <Button type="submit" variant="primary" disabled={loading}>
-          {loading ? "Fetching..." : "Preview"}
-        </Button>
-      </Form>
 
-      {offerUpload && (
-        <Card className="shadow-sm my-4" style={{ maxWidth: "32rem" }}>
-          <Card.Body>
-            <p>
-              Couldn't fetch that page automatically -- some sites block automated requests. If
-              you have the page saved as an HTML file (open it in your browser, then "Save Page
-              As..." / "Save As" and choose "Webpage, HTML only"), or the pattern as a PDF (e.g.
-              a paid pattern from Etsy/Ravelry), you can upload it here instead. The URL above is
-              still used to credit the original source and to avoid duplicates.
-            </p>
-            <Form onSubmit={handleUploadPreview}>
-              <Form.Group className="mb-3" controlId="submit-upload-file">
-                <Form.Label>Saved HTML or PDF file</Form.Label>
-                <Form.Control
-                  type="file"
-                  accept=".html,.htm,text/html,.pdf,application/pdf"
-                  onChange={(e) =>
-                    setUploadFile((e.target as HTMLInputElement).files?.[0] ?? null)
-                  }
-                  required
-                />
-              </Form.Group>
-              {uploadError && <Alert variant="danger">{uploadError}</Alert>}
-              <Button type="submit" variant="outline-primary" disabled={uploadLoading || !uploadFile}>
-                {uploadLoading ? "Processing..." : "Preview from file"}
-              </Button>
-            </Form>
-          </Card.Body>
-        </Card>
+      {!user ? (
+        <Alert variant="light" style={{ maxWidth: "32rem" }}>
+          <Link to="/login">Log in</Link> or <Link to="/register">sign up</Link> to actually
+          submit a pattern -- uploads are tied to an account so you can edit them later.
+        </Alert>
+      ) : (
+        <>
+          <Form onSubmit={handleSubmit} className="mb-2" style={{ maxWidth: "32rem" }}>
+            <Form.Group className="mb-3" controlId="submit-url">
+              <Form.Label>Pattern URL</Form.Label>
+              <Form.Control
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://example.com/my-pattern"
+                required
+              />
+            </Form.Group>
+            {error && <Alert variant="danger">{error}</Alert>}
+            <Button type="submit" variant="primary" disabled={loading}>
+              {loading ? "Fetching..." : "Preview"}
+            </Button>
+          </Form>
+
+          {offerUpload && (
+            <Card className="shadow-sm my-4" style={{ maxWidth: "32rem" }}>
+              <Card.Body>
+                <p>
+                  Couldn't fetch that page automatically -- some sites block automated requests.
+                  If you have the page saved as an HTML file (open it in your browser, then "Save
+                  Page As..." / "Save As" and choose "Webpage, HTML only"), or the pattern as a
+                  PDF (e.g. a paid pattern from Etsy/Ravelry), you can upload it here instead. The
+                  URL above is still used to credit the original source and to avoid duplicates.
+                </p>
+                <Form onSubmit={handleUploadPreview}>
+                  <Form.Group className="mb-3" controlId="submit-upload-file">
+                    <Form.Label>Saved HTML or PDF file</Form.Label>
+                    <Form.Control
+                      type="file"
+                      accept=".html,.htm,text/html,.pdf,application/pdf"
+                      onChange={(e) =>
+                        setUploadFile((e.target as HTMLInputElement).files?.[0] ?? null)
+                      }
+                      required
+                    />
+                  </Form.Group>
+                  {uploadError && <Alert variant="danger">{uploadError}</Alert>}
+                  <Button
+                    type="submit"
+                    variant="outline-primary"
+                    disabled={uploadLoading || !uploadFile}
+                  >
+                    {uploadLoading ? "Processing..." : "Preview from file"}
+                  </Button>
+                </Form>
+              </Card.Body>
+            </Card>
+          )}
+
+          <p className="text-muted">
+            Already have this pattern saved? Check the <Link to="/community">Community</Link> page
+            first -- Yarnboard avoids storing the same source URL twice.
+          </p>
+        </>
       )}
-
-      <p className="text-muted">
-        Already have this pattern saved? Check the <Link to="/community">Community</Link> page
-        first -- Yarnboard avoids storing the same source URL twice.
-      </p>
     </div>
   );
 }

@@ -24,14 +24,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/community" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route
-            path="/community"
-            element={
-              <ProtectedRoute>
-                <CommunityPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/community" element={<CommunityPage />} />
           <Route path="/pattern/:id" element={<PatternDetailPage />} />
           <Route
             path="/pattern/:id/edit"
@@ -41,14 +34,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/submit"
-            element={
-              <ProtectedRoute>
-                <SubmitPatternPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/submit" element={<SubmitPatternPage />} />
           <Route
             path="/submit/review"
             element={
