@@ -145,7 +145,6 @@ frontend/backend services) -- Flask serves the built React app itself.
 
 - The scraper is heuristic and best-effort; it's designed to feed a human
   review step, not to be a guaranteed-correct parser for every pattern site.
-- No email verification on signup.
 - Editing a pattern invalidates progress pattern-wide, not per-part -- a
   typo fix in one step resets everyone's checklist on the whole pattern,
   not just that step. A deliberate trade-off for a simple, lazy
