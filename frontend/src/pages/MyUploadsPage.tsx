@@ -2,12 +2,14 @@
  * merely bookmarked from the community (see MySavedPage). */
 import { useEffect, useState } from "react";
 import { Col, Row, Spinner } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { fetchMyUploads } from "../api/client";
 import PatternCard from "../components/PatternCard";
 import type { Pattern } from "../types/models";
 
 export default function MyUploadsPage() {
+  const { t } = useTranslation();
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,10 +23,10 @@ export default function MyUploadsPage() {
 
   return (
     <div>
-      <h1 className="mb-4">My Uploads</h1>
+      <h1 className="mb-4">{t("myUploads.title")}</h1>
       {patterns.length === 0 && (
         <p className="text-muted">
-          You haven't submitted any patterns yet. <Link to="/submit">Submit one</Link>.
+          {t("myUploads.empty")} <Link to="/submit">{t("myUploads.submitOne")}</Link>.
         </p>
       )}
       <Row xs={1} sm={2} lg={3} className="g-3">

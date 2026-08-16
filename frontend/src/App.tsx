@@ -1,10 +1,11 @@
 import { Container } from "react-bootstrap";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import NavBar from "./components/NavBar";
 import ProtectedRoute from "./components/ProtectedRoute";
 import UpdateBanner from "./components/UpdateBanner";
 import CommunityPage from "./pages/CommunityPage";
 import EditPatternPage from "./pages/EditPatternPage";
+import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import MySavedPage from "./pages/MySavedPage";
 import MyUploadsPage from "./pages/MyUploadsPage";
@@ -13,6 +14,7 @@ import RegisterPage from "./pages/RegisterPage";
 import ReviewPatternPage from "./pages/ReviewPatternPage";
 import StitchFiddlePage from "./pages/StitchFiddlePage";
 import SubmitPatternPage from "./pages/SubmitPatternPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 
 export default function App() {
   return (
@@ -21,9 +23,17 @@ export default function App() {
       <UpdateBanner />
       <Container as="main" className="py-4">
         <Routes>
-          <Route path="/" element={<Navigate to="/community" replace />} />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <HomePage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route
             path="/community"
             element={

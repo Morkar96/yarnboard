@@ -46,9 +46,30 @@ export function resolvePhotoUrl(photoUrl: string | null): string | undefined {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /**
+   * Stable machine-readable error identifier (e.g. "invalid_credentials"),
+   * present on nearly every backend error response -- see each route's
+   * `"code"` field in each blueprint's routes.py. `message` is always the
+   * server's English text (a safe fallback and useful in error logs);
+   * `code` is what UI code should switch on to show a localized string
+   * via i18n's errors.<code> keys (see i18n/en.json / he.json). A handful
+   * of routes (scraper/translation/Stitch Fiddle failures, whose text is
+   * generated per-request rather than fixed) send a code but with no
+   * matching translation key on purpose -- callers fall back to
+   * `message` verbatim for those regardless of UI language, since
+   * there's no fixed string to translate in the first place.
+   */
+  code?: string;
+  /** Extra machine-readable context some codes carry, e.g. file_too_large's
+   * `max_mb` -- needed to interpolate a localized message correctly
+   * rather than just swapping in a fixed translated string. */
+  params?: Record<string, unknown>;
+
+  constructor(status: number, message: string, code?: string, params?: Record<string, unknown>) {
     super(message);
     this.status = status;
+    this.code = code;
+    this.params = params;
   }
 }
 
@@ -66,7 +87,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new ApiError(response.status, body.error || response.statusText);
+    const { error, code, ...params } = body;
+    throw new ApiError(response.status, error || response.statusText, code, params);
   }
   return body as T;
 }
@@ -89,6 +111,20 @@ export function login(email: string, password: string) {
 
 export function logout() {
   return request<{ message: string }>("/api/logout", { method: "POST" });
+}
+
+export function verifyEmail(token: string) {
+  return request<{ message: string }>("/api/verify-email", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+export function resendVerification(email: string) {
+  return request<{ message: string }>("/api/resend-verification", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
 }
 
 export function fetchProfile() {
@@ -192,6 +228,21 @@ export function updatePattern(patternId: number, payload: PatternEditPayload) {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
+}
+
+/**
+ * Auto-translate this pattern to Hebrew via Gemini (see
+ * backend/app/translation.py) and persist it as an unreviewed draft.
+ * No-ops server-side (returns the pattern unchanged) if a translation
+ * already exists -- safe to call speculatively. Slow (a real LLM call),
+ * same UX category as importStitchFiddleLink -- callers should show a
+ * spinner, not treat this as instant. Any logged-in user can trigger it.
+ */
+export function translatePattern(patternId: number) {
+  return request<{ message: string; pattern: Pattern }>(
+    `/api/patterns/${patternId}/translate`,
+    { method: "POST" },
+  );
 }
 
 /** Patterns the current user has stale (now-outdated) checklist progress

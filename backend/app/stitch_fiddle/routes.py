@@ -25,7 +25,7 @@ def _require_login():
     """Return (user_id, None) or (None, error_response) for route guards."""
     user_id = get_current_user_id()
     if not user_id:
-        return None, (jsonify({"error": "Unauthorized"}), 401)
+        return None, (jsonify({"error": "Unauthorized", "code": "unauthorized"}), 401)
     return user_id, None
 
 
@@ -65,7 +65,10 @@ def save_link():
     try:
         chart_id = stitchfiddle.parse_share_url(share_url)
     except StitchFiddleError as exc:
-        return jsonify({"error": str(exc)}), 400
+        # Raw message, not a fixed key -- varies per failure (bad URL
+        # shape, unrecognized domain, etc.), same reasoning as
+        # patterns/routes.py's scraper_error cases.
+        return jsonify({"error": str(exc), "code": "invalid_share_url"}), 400
 
     existing = StitchFiddleLink.query.filter_by(user_id=user_id, chart_id=chart_id).first()
     if existing:
@@ -86,7 +89,10 @@ def delete_link(link_id):
 
     link = StitchFiddleLink.query.get_or_404(link_id)
     if link.user_id != user_id:
-        return jsonify({"error": "You don't have permission to remove this link."}), 403
+        return jsonify({
+            "error": "You don't have permission to remove this link.",
+            "code": "link_forbidden",
+        }), 403
 
     db.session.delete(link)
     db.session.commit()
@@ -114,7 +120,10 @@ def import_link(link_id):
 
     link = StitchFiddleLink.query.get_or_404(link_id)
     if link.user_id != user_id:
-        return jsonify({"error": "You don't have permission to import this link."}), 403
+        return jsonify({
+            "error": "You don't have permission to import this link.",
+            "code": "link_forbidden",
+        }), 403
 
     if link.imported_pattern_id:
         pattern = Pattern.query.get(link.imported_pattern_id)
@@ -130,7 +139,10 @@ def import_link(link_id):
         )
         palette = stitchfiddle.palette_to_json(chart["palette"])
     except StitchFiddleError as exc:
-        return jsonify({"error": str(exc)}), 502
+        # Raw message, not a fixed key -- see save_link's identical case
+        # above for why (varies per failure: fetch timeout, access
+        # denied, chart no longer public, etc.).
+        return jsonify({"error": str(exc), "code": "stitchfiddle_fetch_error"}), 502
 
     # Someone (possibly this same user, via a normal manual submit) may
     # have already published a Pattern for this exact URL -- link to it

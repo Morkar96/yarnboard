@@ -4,11 +4,13 @@
  * community library at all. */
 import { useEffect, useState } from "react";
 import { Col, Row, Spinner } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 import { fetchCommunityPatterns, fetchMySaved, savePattern, unsavePattern } from "../api/client";
 import PatternCard from "../components/PatternCard";
 import type { Pattern } from "../types/models";
 
 export default function CommunityPage() {
+  const { t } = useTranslation();
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -38,8 +40,8 @@ export default function CommunityPage() {
 
   return (
     <div>
-      <h1 className="mb-4">Community Patterns</h1>
-      {patterns.length === 0 && <p className="text-muted">No patterns have been published yet.</p>}
+      <h1 className="mb-4">{t("community.title")}</h1>
+      {patterns.length === 0 && <p className="text-muted">{t("community.empty")}</p>}
       <Row xs={1} sm={2} lg={3} className="g-3">
         {patterns.map((pattern) => (
           <Col key={pattern.id}>

@@ -140,6 +140,35 @@ def create_app():
             db.session.commit()
         print("Chart grid columns added.")
 
+    @app.cli.command("add-hebrew-translation-columns")
+    def add_hebrew_translation_columns():
+        """`flask --app wsgi add-hebrew-translation-columns` -- one-off,
+        idempotent ALTER TABLE for the Hebrew-translation feature's new
+        columns (Pattern.title_he, materials_he, abbreviations_he,
+        instructions_he, translation_reviewed). Same rationale as
+        add-chart-grid-columns above. Safe to re-run (IF NOT EXISTS). Not
+        needed for a brand-new database -- init-db already creates the
+        columns there."""
+        with app.app_context():
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS title_he VARCHAR(200)'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS materials_he TEXT'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS abbreviations_he TEXT'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS instructions_he JSON'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS translation_reviewed '
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+            db.session.commit()
+        print("Hebrew translation columns added.")
+
     @app.cli.command("add-email-verification-columns")
     def add_email_verification_columns():
         """`flask --app wsgi add-email-verification-columns` -- one-off,
@@ -199,7 +228,11 @@ def create_app():
         # Flask's default 413 (from MAX_CONTENT_LENGTH, see config.py) would
         # be an HTML page instead, which the frontend's `response.json()`
         # can't parse.
-        return jsonify({"error": "That file is too large (max 5MB)."}), 413
+        return jsonify({
+            "error": "That file is too large (max 5MB).",
+            "code": "file_too_large",
+            "max_mb": 5,
+        }), 413
 
     @app.route("/", defaults={"path": ""})
     @app.route("/<path:path>")

@@ -48,10 +48,16 @@ def register():
     password = data.get("password") or ""
 
     if not all([username, email, password]):
-        return jsonify({"error": "username, email and password are required"}), 400
+        return jsonify({
+            "error": "username, email and password are required",
+            "code": "missing_fields",
+        }), 400
 
     if User.query.filter((User.email == email) | (User.username == username)).first():
-        return jsonify({"error": "A user with that email or username already exists"}), 409
+        return jsonify({
+            "error": "A user with that email or username already exists",
+            "code": "account_already_exists",
+        }), 409
 
     user = User(
         username=username,
@@ -83,11 +89,12 @@ def login():
 
     user = User.query.filter_by(email=email).first()
     if not user or not bcrypt.check_password_hash(user.password_hash, password):
-        return jsonify({"error": "Invalid email or password"}), 401
+        return jsonify({"error": "Invalid email or password", "code": "invalid_credentials"}), 401
 
     if not user.email_verified:
         return jsonify({
             "error": "Please verify your email before logging in. Check your inbox for the link.",
+            "code": "email_not_verified",
         }), 403
 
     session["user_id"] = user.id
@@ -99,16 +106,23 @@ def verify_email():
     data = request.get_json(silent=True) or {}
     token = (data.get("token") or "").strip()
     if not token:
-        return jsonify({"error": "Missing verification token"}), 400
+        return jsonify({
+            "error": "Missing verification token",
+            "code": "missing_verification_token",
+        }), 400
 
     user = User.query.filter_by(email_verify_token=token).first()
     if not user:
-        return jsonify({"error": "Invalid or already-used verification link"}), 400
+        return jsonify({
+            "error": "Invalid or already-used verification link",
+            "code": "invalid_verification_token",
+        }), 400
 
     issued_at = user.email_verify_token_created_at.replace(tzinfo=timezone.utc)
     if datetime.now(timezone.utc) - issued_at > VERIFY_TOKEN_LIFETIME:
         return jsonify({
             "error": "This verification link has expired. Request a new one.",
+            "code": "verification_token_expired",
         }), 400
 
     user.email_verified = True
@@ -151,13 +165,13 @@ def logout():
 def profile():
     user_id = get_current_user_id()
     if not user_id:
-        return jsonify({"error": "Unauthorized"}), 401
+        return jsonify({"error": "Unauthorized", "code": "unauthorized"}), 401
 
     user = User.query.get(user_id)
     if not user:
         # Session points at a user that no longer exists; clear it.
         session.pop("user_id", None)
-        return jsonify({"error": "Unauthorized"}), 401
+        return jsonify({"error": "Unauthorized", "code": "unauthorized"}), 401
 
     return jsonify({
         "id": user.id,

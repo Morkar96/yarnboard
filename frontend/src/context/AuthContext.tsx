@@ -42,8 +42,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function register(username: string, email: string, password: string) {
+    // Deliberately doesn't log in afterwards: the account is created
+    // unverified, and login() now 403s until the emailed link is followed
+    // (see auth/routes.py). RegisterPage shows a "check your email"
+    // message instead of navigating in as if a session had started.
     await api.register(username, email, password);
-    await login(email, password);
   }
 
   async function logout() {
