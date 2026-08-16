@@ -1,7 +1,8 @@
 {
   "common": {
     "loading": "Loading...",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "or": "or"
   },
   "nav": {
     "brand": "Yarnboard",
@@ -68,7 +69,10 @@
   },
   "community": {
     "title": "Community Patterns",
-    "empty": "No patterns have been published yet."
+    "empty": "No patterns have been published yet.",
+    "guestNotice": "Browsing as a guest -- you can view every pattern and check off steps as you go. Want to save patterns or upload your own?",
+    "guestNoticeUploadLink": "See how uploading works",
+    "guestNoticeSignupLink": "sign up"
   },
   "myUploads": {
     "title": "My Uploads",
@@ -94,6 +98,9 @@
     "uploadButton": "Preview from file",
     "processing": "Processing...",
     "genericUploadError": "Could not process that file.",
+    "guestPromptLogin": "Log in",
+    "guestPromptSignup": "sign up",
+    "guestPromptTail": "to actually submit a pattern -- uploads are tied to an account so you can edit them later.",
     "alreadyHaveIntro": "Already have this pattern saved? Check the",
     "communityPage": "Community",
     "alreadyHaveTail": "page first -- Yarnboard avoids storing the same source URL twice."
@@ -153,7 +160,7 @@
     "originalSiteFallback": "the original site"
   },
   "checklist": {
-    "loginPrompt": "Log in to track your progress on this pattern.",
+    "guestNotice": "You're checking items off as a guest -- progress is saved on this device only. Log in to sync it to your account.",
     "collapseAll": "Collapse all",
     "expandAll": "Expand all",
     "noInstructions": "No instructions were extracted for this pattern."

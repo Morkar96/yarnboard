@@ -10,10 +10,7 @@ export default function NavBar() {
 
   async function handleLogout() {
     await logout();
-    // /community now requires login (ProtectedRoute), so sending a
-    // logged-out user there would just bounce them straight to /login
-    // anyway -- skip the pointless extra redirect.
-    navigate("/login");
+    navigate("/community");
   }
 
   /** Only two languages exist (see i18n/index.ts's SUPPORTED_LANGUAGES),
@@ -38,11 +35,11 @@ export default function NavBar() {
             <Nav.Link as={Link} to="/community">
               {t("nav.community")}
             </Nav.Link>
+            <Nav.Link as={Link} to="/submit">
+              {t("nav.submit")}
+            </Nav.Link>
             {user && (
               <>
-                <Nav.Link as={Link} to="/submit">
-                  {t("nav.submit")}
-                </Nav.Link>
                 <Nav.Link as={Link} to="/mine">
                   {t("nav.myUploads")}
                 </Nav.Link>

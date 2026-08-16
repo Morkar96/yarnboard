@@ -1,7 +1,8 @@
 {
   "common": {
     "loading": "טוען...",
-    "unknown": "לא ידוע"
+    "unknown": "לא ידוע",
+    "or": "או"
   },
   "nav": {
     "brand": "Yarnboard",
@@ -68,7 +69,10 @@
   },
   "community": {
     "title": "דוגמיות הקהילה",
-    "empty": "עדיין לא פורסמו דוגמיות."
+    "empty": "עדיין לא פורסמו דוגמיות.",
+    "guestNotice": "אתם גולשים כאורחים -- תוכלו לצפות בכל הדוגמיות ולסמן שלבים תוך כדי עבודה. רוצים לשמור דוגמיות או להעלות משלכם?",
+    "guestNoticeUploadLink": "כך עובדת ההעלאה",
+    "guestNoticeSignupLink": "הרשמה"
   },
   "myUploads": {
     "title": "הדוגמיות שלי",
@@ -94,6 +98,9 @@
     "uploadButton": "תצוגה מקדימה מקובץ",
     "processing": "מעבד...",
     "genericUploadError": "לא ניתן היה לעבד את הקובץ.",
+    "guestPromptLogin": "התחברו",
+    "guestPromptSignup": "הירשמו",
+    "guestPromptTail": "כדי להעלות דוגמית בפועל -- העלאות משויכות לחשבון כדי שתוכלו לערוך אותן מאוחר יותר.",
     "alreadyHaveIntro": "כבר יש לכם את הדוגמית הזו שמורה? בדקו את דף ה",
     "communityPage": "קהילה",
     "alreadyHaveTail": "קודם -- Yarnboard נמנע משמירת אותו קישור מקור פעמיים."
@@ -153,7 +160,7 @@
     "originalSiteFallback": "האתר המקורי"
   },
   "checklist": {
-    "loginPrompt": "התחברו כדי לעקוב אחר ההתקדמות שלכם בדוגמית הזו.",
+    "guestNotice": "אתם מסמנים פריטים כאורחים -- ההתקדמות נשמרת במכשיר זה בלבד. התחברו כדי לסנכרן אותה לחשבון שלכם.",
     "collapseAll": "כיווץ הכול",
     "expandAll": "הרחבת הכול",
     "noInstructions": "לא חולצו הוראות עבור הדוגמית הזו."

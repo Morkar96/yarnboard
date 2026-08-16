@@ -7,15 +7,23 @@
  * happens this page offers a fallback: upload the page's saved HTML, or a
  * PDF (e.g. a paid Etsy/Ravelry pattern that only exists as a PDF in the
  * first place -- there's nothing to "fetch" for those at all), and the
- * same extraction heuristics run against that instead. */
+ * same extraction heuristics run against that instead.
+ *
+ * This page itself is public (unregistered visitors can read how
+ * uploading works), but the actual scrape/submit endpoints all require
+ * login server-side -- so anonymous visitors see the explanation plus a
+ * login/register prompt instead of the live form, rather than being able
+ * to fill it out and only find out it's blocked at the end. */
 import { useState, type FormEvent } from "react";
 import { Alert, Button, Card, Form } from "react-bootstrap";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { previewPattern, previewPatternFromUpload } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 import { useApiErrorMessage } from "../i18n/useApiErrorMessage";
 
 export default function SubmitPatternPage() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const getErrorMessage = useApiErrorMessage();
@@ -72,52 +80,66 @@ export default function SubmitPatternPage() {
     <div>
       <h1 className="mb-3">{t("submit.title")}</h1>
       <p className="text-muted">{t("submit.intro")}</p>
-      <Form onSubmit={handleSubmit} className="mb-2" style={{ maxWidth: "32rem" }}>
-        <Form.Group className="mb-3" controlId="submit-url">
-          <Form.Label>{t("submit.urlLabel")}</Form.Label>
-          <Form.Control
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder={t("submit.urlPlaceholder")}
-            required
-          />
-        </Form.Group>
-        {error && <Alert variant="danger">{error}</Alert>}
-        <Button type="submit" variant="primary" disabled={loading}>
-          {loading ? t("submit.fetching") : t("submit.previewButton")}
-        </Button>
-      </Form>
 
-      {offerUpload && (
-        <Card className="shadow-sm my-4" style={{ maxWidth: "32rem" }}>
-          <Card.Body>
-            <p>{t("submit.uploadFallbackIntro")}</p>
-            <Form onSubmit={handleUploadPreview}>
-              <Form.Group className="mb-3" controlId="submit-upload-file">
-                <Form.Label>{t("submit.uploadFileLabel")}</Form.Label>
-                <Form.Control
-                  type="file"
-                  accept=".html,.htm,text/html,.pdf,application/pdf"
-                  onChange={(e) =>
-                    setUploadFile((e.target as HTMLInputElement).files?.[0] ?? null)
-                  }
-                  required
-                />
-              </Form.Group>
-              {uploadError && <Alert variant="danger">{uploadError}</Alert>}
-              <Button type="submit" variant="outline-primary" disabled={uploadLoading || !uploadFile}>
-                {uploadLoading ? t("submit.processing") : t("submit.uploadButton")}
-              </Button>
-            </Form>
-          </Card.Body>
-        </Card>
+      {!user ? (
+        <Alert variant="light" style={{ maxWidth: "32rem" }}>
+          <Link to="/login">{t("submit.guestPromptLogin")}</Link> {t("common.or")}{" "}
+          <Link to="/register">{t("submit.guestPromptSignup")}</Link> {t("submit.guestPromptTail")}
+        </Alert>
+      ) : (
+        <>
+          <Form onSubmit={handleSubmit} className="mb-2" style={{ maxWidth: "32rem" }}>
+            <Form.Group className="mb-3" controlId="submit-url">
+              <Form.Label>{t("submit.urlLabel")}</Form.Label>
+              <Form.Control
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder={t("submit.urlPlaceholder")}
+                required
+              />
+            </Form.Group>
+            {error && <Alert variant="danger">{error}</Alert>}
+            <Button type="submit" variant="primary" disabled={loading}>
+              {loading ? t("submit.fetching") : t("submit.previewButton")}
+            </Button>
+          </Form>
+
+          {offerUpload && (
+            <Card className="shadow-sm my-4" style={{ maxWidth: "32rem" }}>
+              <Card.Body>
+                <p>{t("submit.uploadFallbackIntro")}</p>
+                <Form onSubmit={handleUploadPreview}>
+                  <Form.Group className="mb-3" controlId="submit-upload-file">
+                    <Form.Label>{t("submit.uploadFileLabel")}</Form.Label>
+                    <Form.Control
+                      type="file"
+                      accept=".html,.htm,text/html,.pdf,application/pdf"
+                      onChange={(e) =>
+                        setUploadFile((e.target as HTMLInputElement).files?.[0] ?? null)
+                      }
+                      required
+                    />
+                  </Form.Group>
+                  {uploadError && <Alert variant="danger">{uploadError}</Alert>}
+                  <Button
+                    type="submit"
+                    variant="outline-primary"
+                    disabled={uploadLoading || !uploadFile}
+                  >
+                    {uploadLoading ? t("submit.processing") : t("submit.uploadButton")}
+                  </Button>
+                </Form>
+              </Card.Body>
+            </Card>
+          )}
+
+          <p className="text-muted">
+            {t("submit.alreadyHaveIntro")} <Link to="/community">{t("submit.communityPage")}</Link>{" "}
+            {t("submit.alreadyHaveTail")}
+          </p>
+        </>
       )}
-
-      <p className="text-muted">
-        {t("submit.alreadyHaveIntro")} <Link to="/community">{t("submit.communityPage")}</Link>{" "}
-        {t("submit.alreadyHaveTail")}
-      </p>
     </div>
   );
 }
