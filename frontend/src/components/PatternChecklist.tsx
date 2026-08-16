@@ -11,17 +11,29 @@
  * Each part can be collapsed independently (handy once you've finished a
  * section and want it out of the way), and a single "Collapse/Expand all"
  * toggle above the list controls every part at once.
+ *
+ * `instructionsHe` (optional) is a pure *display* overlay, shown instead
+ * of the English text when the UI language is Hebrew -- but `part`/
+ * `index` passed to toggleProgress (or cached for a guest), and every
+ * state key here, always stay the canonical English identifiers
+ * regardless of what's on screen. See Pattern.instructions_he's docstring
+ * in backend/app/models.py for why: checklist progress is keyed by the
+ * English part name, so a Hebrew-mode checklist would have nowhere
+ * compatible to store progress against if it used its own translated
+ * keys instead of looking them up against the same English structure.
  */
 import { useState } from "react";
 import { Alert, Button, Card, Collapse, Form } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 import { toggleProgress } from "../api/client";
 import { useAuth } from "../context/AuthContext";
-import type { InstructionsMap } from "../types/models";
+import type { HebrewInstructionEntry, InstructionsMap } from "../types/models";
 import { getGuestProgress, setGuestStep } from "../utils/guestProgress";
 
 interface Props {
   patternId: number;
   instructions: InstructionsMap;
+  instructionsHe?: Record<string, HebrewInstructionEntry> | null;
 }
 
 /** Overlay any cached guest progress onto server-provided instructions
@@ -39,8 +51,10 @@ function withGuestProgress(patternId: number, instructions: InstructionsMap, isG
   return result;
 }
 
-export default function PatternChecklist({ patternId, instructions }: Props) {
+export default function PatternChecklist({ patternId, instructions, instructionsHe }: Props) {
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
+  const showHebrew = i18n.language === "he" && !!instructionsHe;
   const [localInstructions, setLocalInstructions] = useState(() =>
     withGuestProgress(patternId, instructions, !user),
   );
@@ -81,19 +95,14 @@ export default function PatternChecklist({ patternId, instructions }: Props) {
 
   const parts = Object.entries(localInstructions);
   if (parts.length === 0) {
-    return <p className="text-muted">No instructions were extracted for this pattern.</p>;
+    return <p className="text-muted">{t("checklist.noInstructions")}</p>;
   }
 
   const allCollapsed = parts.every(([part]) => collapsedParts.has(part));
 
   return (
     <div className="d-flex flex-column gap-3">
-      {!user && (
-        <Alert variant="light">
-          You're checking items off as a guest -- progress is saved on this device only. Log in to
-          sync it to your account.
-        </Alert>
-      )}
+      {!user && <Alert variant="light">{t("checklist.guestNotice")}</Alert>}
 
       <Button
         variant="outline-secondary"
@@ -103,11 +112,12 @@ export default function PatternChecklist({ patternId, instructions }: Props) {
           setCollapsedParts(allCollapsed ? new Set() : new Set(parts.map(([part]) => part)))
         }
       >
-        {allCollapsed ? "Expand all" : "Collapse all"}
+        {allCollapsed ? t("checklist.expandAll") : t("checklist.collapseAll")}
       </Button>
 
       {parts.map(([part, steps]) => {
         const isCollapsed = collapsedParts.has(part);
+        const heading = showHebrew ? (instructionsHe?.[part]?.heading_he ?? part) : part;
         return (
           <Card key={part} className="shadow-sm">
             <Card.Header
@@ -116,22 +126,27 @@ export default function PatternChecklist({ patternId, instructions }: Props) {
               onClick={() => togglePart(part)}
               aria-expanded={!isCollapsed}
             >
-              {part}
+              {heading}
               <span className="text-muted">{isCollapsed ? "▸" : "▾"}</span>
             </Card.Header>
             <Collapse in={!isCollapsed}>
               <div>
                 <Card.Body className="d-flex flex-column gap-2">
-                  {steps.map((step, index) => (
-                    <Form.Check
-                      key={index}
-                      type="checkbox"
-                      id={`${part}-${index}`}
-                      label={step.step}
-                      checked={step.completed}
-                      onChange={(e) => handleToggle(part, index, e.target.checked)}
-                    />
-                  ))}
+                  {steps.map((step, index) => {
+                    const label = showHebrew
+                      ? (instructionsHe?.[part]?.steps_he?.[index] ?? step.step)
+                      : step.step;
+                    return (
+                      <Form.Check
+                        key={index}
+                        type="checkbox"
+                        id={`${part}-${index}`}
+                        label={label}
+                        checked={step.completed}
+                        onChange={(e) => handleToggle(part, index, e.target.checked)}
+                      />
+                    );
+                  })}
                 </Card.Body>
               </div>
             </Collapse>

@@ -16,6 +16,7 @@ const basePattern: Pattern = {
   photo_url: null,
   has_photo: false,
   chart_grid: null,
+  translations: { he: null },
   uploader: "knitter123",
   uploader_id: 2,
   created_at: null,

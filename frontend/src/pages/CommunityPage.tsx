@@ -5,6 +5,7 @@
  * visitors rather than shown disabled. */
 import { useEffect, useState } from "react";
 import { Alert, Col, Row, Spinner } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { fetchCommunityPatterns, fetchMySaved, savePattern, unsavePattern } from "../api/client";
 import PatternCard from "../components/PatternCard";
@@ -13,6 +14,7 @@ import type { Pattern } from "../types/models";
 
 export default function CommunityPage() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -44,15 +46,15 @@ export default function CommunityPage() {
 
   return (
     <div>
-      <h1 className="mb-4">Community Patterns</h1>
+      <h1 className="mb-4">{t("community.title")}</h1>
       {!user && (
         <Alert variant="light">
-          Browsing as a guest -- you can view every pattern and check off steps as you go. Want to
-          save patterns or upload your own? <Link to="/submit">See how uploading works</Link>, or{" "}
-          <Link to="/register">sign up</Link>.
+          {t("community.guestNotice")}{" "}
+          <Link to="/submit">{t("community.guestNoticeUploadLink")}</Link>, {t("common.or")}{" "}
+          <Link to="/register">{t("community.guestNoticeSignupLink")}</Link>.
         </Alert>
       )}
-      {patterns.length === 0 && <p className="text-muted">No patterns have been published yet.</p>}
+      {patterns.length === 0 && <p className="text-muted">{t("community.empty")}</p>}
       <Row xs={1} sm={2} lg={3} className="g-3">
         {patterns.map((pattern) => (
           <Col key={pattern.id}>

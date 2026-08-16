@@ -2,12 +2,14 @@
  * been uploaded by this same account (see MyUploadsPage for that list). */
 import { useEffect, useState } from "react";
 import { Col, Row, Spinner } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { fetchMySaved, unsavePattern } from "../api/client";
 import PatternCard from "../components/PatternCard";
 import type { Pattern } from "../types/models";
 
 export default function MySavedPage() {
+  const { t } = useTranslation();
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -26,11 +28,11 @@ export default function MySavedPage() {
 
   return (
     <div>
-      <h1 className="mb-4">My Saved Patterns</h1>
+      <h1 className="mb-4">{t("mySaved.title")}</h1>
       {patterns.length === 0 && (
         <p className="text-muted">
-          You haven't saved any patterns yet. Browse the <Link to="/community">Community</Link>{" "}
-          page to find some.
+          {t("mySaved.empty")} <Link to="/community">{t("mySaved.communityPage")}</Link>{" "}
+          {t("mySaved.emptyTail")}
         </p>
       )}
       <Row xs={1} sm={2} lg={3} className="g-3">

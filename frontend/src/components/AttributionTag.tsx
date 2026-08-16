@@ -4,19 +4,23 @@
  * never hand-rolled in more than one place, so "who uploaded it" and "who
  * originally made it" can't drift or go missing on any one view.
  */
+import { useTranslation } from "react-i18next";
 import type { Pattern } from "../types/models";
 
 export default function AttributionTag({ pattern }: { pattern: Pattern }) {
-  const originalSite = pattern.source_site_name || pattern.source_domain || "the original site";
+  const { t } = useTranslation();
+  const originalSite =
+    pattern.source_site_name || pattern.source_domain || t("attribution.originalSiteFallback");
 
   return (
     <div className="small text-muted d-flex flex-column gap-1 mb-2">
       <span>
-        Uploaded by <strong className="text-body">{pattern.uploader}</strong>
+        {t("attribution.uploadedBy")} <strong className="text-body">{pattern.uploader}</strong>
       </span>
       <span>
-        Original pattern by <strong className="text-body">{pattern.author || "Unknown"}</strong>{" "}
-        on{" "}
+        {t("attribution.originalByOn")}{" "}
+        <strong className="text-body">{pattern.author || t("attribution.unknownAuthor")}</strong>{" "}
+        {t("attribution.on")}{" "}
         <a
           href={pattern.original_url}
           target="_blank"

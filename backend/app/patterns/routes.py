@@ -22,7 +22,7 @@ from flask import Blueprint, Response, current_app, request, jsonify
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.attributes import flag_modified
 
-from .. import photo
+from .. import photo, translation
 from ..email import send_pattern_updated_email
 from ..extensions import db
 from ..models import Pattern, User, UserPatternProgress
@@ -36,13 +36,42 @@ def _require_login():
     """Return (user_id, None) or (None, error_response) for route guards."""
     user_id = get_current_user_id()
     if not user_id:
-        return None, (jsonify({"error": "Unauthorized"}), 401)
+        return None, (jsonify({"error": "Unauthorized", "code": "unauthorized"}), 401)
     return user_id, None
 
 
 def _can_edit(user: User, pattern: Pattern) -> bool:
     """Admins can edit any pattern; everyone else only their own uploads."""
     return user.is_admin or pattern.uploader_id == user.id
+
+
+def _validate_instructions_he(instructions: dict, instructions_he) -> str | None:
+    """
+    Returns an error message if `instructions_he` doesn't structurally
+    mirror `instructions` -- same part-name keys (never translated keys
+    of its own), and each part's steps_he the same length as its English
+    steps. Returns None if valid.
+
+    This invariant is what lets checklist progress (keyed by the English
+    part name -- see UserPatternProgress's docstring and toggle_progress
+    below) stay correct regardless of which language is displayed; see
+    Pattern.instructions_he's docstring in models.py for the full
+    rationale. A mismatch here is a translation bug, not a legitimate
+    structural edit -- reject it rather than silently accepting content
+    that would desync from the checklist.
+    """
+    if not isinstance(instructions_he, dict):
+        return "instructions_he must be an object keyed by part name."
+    if set(instructions_he.keys()) != set(instructions.keys()):
+        return "instructions_he must have exactly the same part names as instructions."
+    for part, steps in instructions.items():
+        entry = instructions_he[part]
+        if not isinstance(entry, dict):
+            return f"instructions_he['{part}'] must be an object with heading_he/steps_he."
+        steps_he = entry.get("steps_he")
+        if not isinstance(steps_he, list) or len(steps_he) != len(steps):
+            return f"instructions_he['{part}']['steps_he'] must have {len(steps)} entries."
+    return None
 
 
 def _existing_pattern_response(url: str):
@@ -72,7 +101,7 @@ def preview_pattern():
 
     url = (request.get_json(silent=True) or {}).get("url", "").strip()
     if not url:
-        return jsonify({"error": "url is required"}), 400
+        return jsonify({"error": "url is required", "code": "url_required"}), 400
 
     duplicate_response = _existing_pattern_response(url)
     if duplicate_response:
@@ -81,7 +110,12 @@ def preview_pattern():
     try:
         draft = scrape_pattern_from_url(url)
     except ScraperError as exc:
-        return jsonify({"error": str(exc)}), 502
+        # No fixed translation key for this one -- the message itself is
+        # server-generated and varies per failure (bot-detection, timeout,
+        # unparseable page, etc.), not a fixed string a resource file could
+        # localize. The frontend shows it as-is regardless of UI language;
+        # "scraper_error" just tells it not to look up a translation key.
+        return jsonify({"error": str(exc), "code": "scraper_error"}), 502
 
     return jsonify({"duplicate": False, "existing_pattern_id": None, "draft": draft}), 200
 
@@ -116,11 +150,11 @@ def preview_pattern_from_upload():
 
     url = (request.form.get("url") or "").strip()
     if not url:
-        return jsonify({"error": "url is required"}), 400
+        return jsonify({"error": "url is required", "code": "url_required"}), 400
 
     uploaded = request.files.get("html_file")
     if not uploaded or not uploaded.filename:
-        return jsonify({"error": "html_file is required"}), 400
+        return jsonify({"error": "html_file is required", "code": "file_required"}), 400
 
     duplicate_response = _existing_pattern_response(url)
     if duplicate_response:
@@ -135,7 +169,10 @@ def preview_pattern_from_upload():
             html = raw_bytes.decode("utf-8", errors="replace")
             draft = parse_pattern_html(html, url)
     except ScraperError as exc:
-        return jsonify({"error": str(exc)}), 502
+        # See preview_pattern's identical case above for why this is a
+        # raw message + a generic "don't translate this" code, not a
+        # fixed translation key.
+        return jsonify({"error": str(exc), "code": "scraper_error"}), 502
 
     return jsonify({"duplicate": False, "existing_pattern_id": None, "draft": draft}), 200
 
@@ -157,10 +194,16 @@ def submit_pattern():
     original_url = (data.get("original_url") or "").strip()
     title = (data.get("title") or "").strip()
     if not original_url or not title:
-        return jsonify({"error": "original_url and title are required"}), 400
+        return jsonify({
+            "error": "original_url and title are required",
+            "code": "missing_fields",
+        }), 400
 
     if Pattern.query.filter_by(original_url=original_url).first():
-        return jsonify({"error": "A pattern from this URL already exists."}), 409
+        return jsonify({
+            "error": "A pattern from this URL already exists.",
+            "code": "pattern_already_exists",
+        }), 409
 
     pattern = Pattern(
         original_url=original_url,
@@ -182,7 +225,10 @@ def submit_pattern():
         # Race: another request inserted the same original_url between our
         # check above and this commit. The unique constraint caught it.
         db.session.rollback()
-        return jsonify({"error": "A pattern from this URL already exists."}), 409
+        return jsonify({
+            "error": "A pattern from this URL already exists.",
+            "code": "pattern_already_exists",
+        }), 409
 
     return jsonify({
         "message": "Pattern successfully published to the Yarnboard community.",
@@ -206,6 +252,18 @@ def edit_pattern(pattern_id):
     instructions_version and emails everyone with meaningful progress on
     this pattern (see _notify_progress_users) -- this is what the
     per-user staleness mechanism in UserPatternProgress keys off of.
+
+    Optionally also accepts title_he/materials_he/abbreviations_he/
+    instructions_he -- present only when the uploader/an admin is
+    correcting the auto-translation (see POST /<id>/translate), never
+    required. Providing `instructions_he` (even as an explicit `{}`, e.g.
+    to clear a translation) is what signals "this request is editing the
+    Hebrew content"; omitting it entirely leaves any existing translation
+    untouched. A Hebrew-content edit sets translation_reviewed = True (an
+    edit *is* the review) but deliberately does NOT bump
+    instructions_version or notify anyone -- that mechanism is about the
+    canonical English structure changing shape, not a translation
+    correction.
     """
     user_id, error = _require_login()
     if error:
@@ -214,15 +272,27 @@ def edit_pattern(pattern_id):
     user = User.query.get(user_id)
     pattern = Pattern.query.get_or_404(pattern_id)
     if not _can_edit(user, pattern):
-        return jsonify({"error": "You don't have permission to edit this pattern."}), 403
+        return jsonify({
+            "error": "You don't have permission to edit this pattern.",
+            "code": "edit_forbidden",
+        }), 403
 
     data = request.get_json(silent=True) or {}
     title = (data.get("title") or "").strip()
     if not title:
-        return jsonify({"error": "title is required"}), 400
+        return jsonify({"error": "title is required", "code": "title_required"}), 400
 
     new_instructions = data.get("instructions") or {}
     instructions_changed = new_instructions != (pattern.instructions or {})
+
+    if "instructions_he" in data:
+        instructions_he = data.get("instructions_he") or {}
+        validation_error = _validate_instructions_he(new_instructions, instructions_he)
+        if validation_error:
+            # Raw message, not a fixed key -- see the scraper_error cases
+            # above for the same reasoning (this text names the specific
+            # part/step count that's wrong, generated per-request).
+            return jsonify({"error": validation_error, "code": "invalid_translation"}), 400
 
     pattern.title = title
     pattern.author = data.get("author") or None
@@ -232,6 +302,13 @@ def edit_pattern(pattern_id):
     if instructions_changed:
         pattern.instructions_version += 1
 
+    if "instructions_he" in data:
+        pattern.title_he = (data.get("title_he") or "").strip() or None
+        pattern.materials_he = data.get("materials_he")
+        pattern.abbreviations_he = data.get("abbreviations_he")
+        pattern.instructions_he = instructions_he
+        pattern.translation_reviewed = True
+
     db.session.commit()
 
     if instructions_changed:
@@ -239,6 +316,56 @@ def edit_pattern(pattern_id):
 
     return jsonify({
         "message": "Pattern updated.",
+        "pattern": pattern.to_dict(current_user_id=user_id),
+    }), 200
+
+
+@patterns_bp.route("/<int:pattern_id>/translate", methods=["POST"])
+def translate_pattern(pattern_id):
+    """
+    Auto-translate this pattern's content to Hebrew via Gemini (see
+    ../translation.py) and persist it as an unreviewed draft. No-ops
+    (returns the pattern unchanged) if a translation already exists --
+    translation happens once per pattern, never overwriting an existing
+    one (including a human-reviewed one) on every request; to redo it, an
+    uploader/admin edits the Hebrew fields directly via PATCH /<id>
+    instead.
+
+    Any logged-in user can trigger this, not just the pattern's uploader
+    -- translating doesn't change the pattern's authoritative English
+    content, so it doesn't need the stricter _can_edit permission that
+    editing/photo routes use.
+    """
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    pattern = Pattern.query.get_or_404(pattern_id)
+    if pattern.title_he:
+        return jsonify({
+            "message": "This pattern already has a Hebrew translation.",
+            "pattern": pattern.to_dict(current_user_id=user_id),
+        }), 200
+
+    try:
+        title_he, materials_he, abbreviations_he, instructions_he = (
+            translation.translate_pattern_to_hebrew(
+                pattern.title, pattern.materials, pattern.abbreviations,
+                pattern.instructions or {},
+            )
+        )
+    except translation.TranslationError as exc:
+        return jsonify({"error": str(exc), "code": "translation_error"}), 502
+
+    pattern.title_he = title_he
+    pattern.materials_he = materials_he
+    pattern.abbreviations_he = abbreviations_he
+    pattern.instructions_he = instructions_he
+    pattern.translation_reviewed = False
+    db.session.commit()
+
+    return jsonify({
+        "message": "Pattern translated to Hebrew.",
         "pattern": pattern.to_dict(current_user_id=user_id),
     }), 200
 
@@ -270,21 +397,32 @@ def upload_pattern_photo(pattern_id):
     user = User.query.get(user_id)
     pattern = Pattern.query.get_or_404(pattern_id)
     if not _can_edit(user, pattern):
-        return jsonify({"error": "You don't have permission to edit this pattern."}), 403
+        return jsonify({
+            "error": "You don't have permission to edit this pattern.",
+            "code": "edit_forbidden",
+        }), 403
 
     uploaded = request.files.get("photo")
     if not uploaded or not uploaded.filename:
-        return jsonify({"error": "photo is required"}), 400
+        return jsonify({"error": "photo is required", "code": "file_required"}), 400
 
     raw_bytes = uploaded.read()
     if len(raw_bytes) > photo.MAX_UPLOAD_BYTES:
         max_mb = photo.MAX_UPLOAD_BYTES // (1024 * 1024)
-        return jsonify({"error": f"That photo is too large (max {max_mb}MB)."}), 400
+        # code alone isn't enough to localize this one -- the limit
+        # (max_mb) is interpolated, so a translated string needs it too;
+        # the frontend passes {max_mb} into the "file_too_large" key's
+        # translation rather than just swapping in a fixed string.
+        return jsonify({
+            "error": f"That photo is too large (max {max_mb}MB).",
+            "code": "file_too_large",
+            "max_mb": max_mb,
+        }), 400
 
     try:
         processed = photo.process_upload(raw_bytes)
     except photo.PhotoError as exc:
-        return jsonify({"error": str(exc)}), 400
+        return jsonify({"error": str(exc), "code": "photo_error"}), 400
 
     pattern.photo_data = processed
     pattern.photo_content_type = "image/jpeg"
@@ -314,7 +452,10 @@ def delete_pattern_photo(pattern_id):
     user = User.query.get(user_id)
     pattern = Pattern.query.get_or_404(pattern_id)
     if not _can_edit(user, pattern):
-        return jsonify({"error": "You don't have permission to edit this pattern."}), 403
+        return jsonify({
+            "error": "You don't have permission to edit this pattern.",
+            "code": "edit_forbidden",
+        }), 403
 
     pattern.photo_data = None
     pattern.photo_content_type = None
@@ -341,7 +482,7 @@ def get_pattern_photo(pattern_id):
     """
     pattern = Pattern.query.get_or_404(pattern_id)
     if not pattern.photo_data:
-        return jsonify({"error": "This pattern has no uploaded photo."}), 404
+        return jsonify({"error": "This pattern has no uploaded photo.", "code": "no_photo"}), 404
 
     return Response(pattern.photo_data, mimetype=pattern.photo_content_type or "image/jpeg")
 
@@ -448,7 +589,7 @@ def my_saved_patterns():
         pattern_id = (request.get_json(silent=True) or {}).get("pattern_id")
         pattern = Pattern.query.get(pattern_id)
         if not pattern:
-            return jsonify({"error": "Pattern not found"}), 404
+            return jsonify({"error": "Pattern not found", "code": "pattern_not_found"}), 404
         if pattern not in user.saved_patterns:
             user.saved_patterns.append(pattern)
             db.session.commit()
@@ -526,11 +667,17 @@ def toggle_progress(pattern_id):
     completed = bool(data.get("completed"))
 
     if part is None or index is None or part not in (pattern.instructions or {}):
-        return jsonify({"error": "part and index must reference a valid step"}), 400
+        return jsonify({
+            "error": "part and index must reference a valid step",
+            "code": "invalid_progress_step",
+        }), 400
 
     step_count = len(pattern.instructions[part])
     if not isinstance(index, int) or not (0 <= index < step_count):
-        return jsonify({"error": "index out of range for this part"}), 400
+        return jsonify({
+            "error": "index out of range for this part",
+            "code": "invalid_progress_step",
+        }), 400
 
     progress = UserPatternProgress.query.filter_by(
         user_id=user_id, pattern_id=pattern_id

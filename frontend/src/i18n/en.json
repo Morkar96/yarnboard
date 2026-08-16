@@ -1,0 +1,228 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "unknown": "Unknown",
+    "or": "or"
+  },
+  "nav": {
+    "brand": "Yarnboard",
+    "community": "Community",
+    "submit": "Submit a Pattern",
+    "myUploads": "My Uploads",
+    "mySaved": "My Saved",
+    "stitchFiddle": "Stitch Fiddle",
+    "greeting": "Hi, {{username}}",
+    "logout": "Log out",
+    "login": "Log in",
+    "signup": "Sign up",
+    "language": "עברית"
+  },
+  "home": {
+    "welcome": "Welcome",
+    "welcomeNamed": "Welcome, {{username}}",
+    "subtitle": "Here's how to get the most out of Yarnboard.",
+    "stitchFiddleTitle": "Import a Stitch Fiddle chart",
+    "stitchFiddleDescription": "Save a stitchfiddle.com share link, then import it with one click. Yarnboard turns the chart into a colored grid you can view alongside a plain color-key list -- no written instructions, since that's a premium Stitch Fiddle feature, but you can always add your own via the pattern's Edit page afterwards.",
+    "stitchFiddleCta": "Import a chart",
+    "submitTitle": "Submit a pattern from a URL or PDF",
+    "submitDescription": "Paste a link to a pattern page and Yarnboard scrapes the materials, abbreviations, and instructions automatically. If a site blocks automatic fetching, or the pattern only exists as a PDF (e.g. a paid Etsy/Ravelry download), upload the saved page or PDF instead. Either way, you review and can edit everything before it's published.",
+    "submitCta": "Submit a pattern",
+    "useTitle": "Use an existing pattern",
+    "useDescription": "Browse everything the community has published, save the ones you want to come back to, and check off each instruction step as you work -- your progress is tracked per pattern, just for you.",
+    "useCta": "Browse the community",
+    "editTitle": "Edit a pattern you've uploaded",
+    "editDescription": "Fix a typo, update materials, or add missing steps on any pattern you submitted, from My Uploads. Heads up: editing a pattern's instructions resets everyone's checklist progress on it, since the steps may no longer line up.",
+    "editCta": "Go to My Uploads"
+  },
+  "auth": {
+    "login": {
+      "title": "Log in",
+      "emailLabel": "Email",
+      "passwordLabel": "Password",
+      "submit": "Log in",
+      "submitting": "Logging in...",
+      "failed": "Login failed.",
+      "resendLink": "Resend verification email",
+      "resendSent": "Verification email sent -- check your inbox.",
+      "resendFailed": "Couldn't resend right now -- try again shortly."
+    },
+    "register": {
+      "title": "Create an account",
+      "usernameLabel": "Username",
+      "emailLabel": "Email",
+      "passwordLabel": "Password",
+      "submit": "Sign up",
+      "submitting": "Creating account...",
+      "failed": "Registration failed.",
+      "checkEmailTitle": "Check your email",
+      "checkEmailBody": "We sent a verification link to {{email}}. Click it to activate your account, then come back and log in.",
+      "goToLogin": "Go to login"
+    },
+    "verify": {
+      "title": "Email verification",
+      "verifying": "Verifying...",
+      "missingToken": "This verification link is missing its token.",
+      "failed": "Verification failed.",
+      "goToLogin": "Go to login",
+      "backToLogin": "Back to login"
+    }
+  },
+  "community": {
+    "title": "Community Patterns",
+    "empty": "No patterns have been published yet.",
+    "guestNotice": "Browsing as a guest -- you can view every pattern and check off steps as you go. Want to save patterns or upload your own?",
+    "guestNoticeUploadLink": "See how uploading works",
+    "guestNoticeSignupLink": "sign up"
+  },
+  "myUploads": {
+    "title": "My Uploads",
+    "empty": "You haven't submitted any patterns yet.",
+    "submitOne": "Submit one"
+  },
+  "mySaved": {
+    "title": "My Saved Patterns",
+    "empty": "You haven't saved any patterns yet. Browse the",
+    "communityPage": "Community",
+    "emptyTail": "page to find some."
+  },
+  "submit": {
+    "title": "Submit a Pattern",
+    "intro": "Paste a link to a knitting or crochet pattern webpage. We'll pull out the title, materials, abbreviations, and instructions for you to review before publishing.",
+    "urlLabel": "Pattern URL",
+    "urlPlaceholder": "https://example.com/my-pattern",
+    "previewButton": "Preview",
+    "fetching": "Fetching...",
+    "genericFetchError": "Could not fetch that page. Check the URL and try again.",
+    "uploadFallbackIntro": "Couldn't fetch that page automatically -- some sites block automated requests. If you have the page saved as an HTML file (open it in your browser, then \"Save Page As...\" / \"Save As\" and choose \"Webpage, HTML only\"), or the pattern as a PDF (e.g. a paid pattern from Etsy/Ravelry), you can upload it here instead. The URL above is still used to credit the original source and to avoid duplicates.",
+    "uploadFileLabel": "Saved HTML or PDF file",
+    "uploadButton": "Preview from file",
+    "processing": "Processing...",
+    "genericUploadError": "Could not process that file.",
+    "guestPromptLogin": "Log in",
+    "guestPromptSignup": "sign up",
+    "guestPromptTail": "to actually submit a pattern -- uploads are tied to an account so you can edit them later.",
+    "alreadyHaveIntro": "Already have this pattern saved? Check the",
+    "communityPage": "Community",
+    "alreadyHaveTail": "page first -- Yarnboard avoids storing the same source URL twice."
+  },
+  "review": {
+    "title": "Review before publishing",
+    "sourceLabel": "Source: {{url}}",
+    "publishButton": "Publish Pattern",
+    "publishing": "Publishing...",
+    "publishFailed": "Publishing failed."
+  },
+  "publishConsent": {
+    "introLead": "Publishing to Yarnboard:",
+    "intro": "this pattern will be saved to the shared Yarnboard community library and visible to all users, along with your username and a link back to the original source. Please only submit patterns you have the right to share, and review the extracted content above for accuracy before publishing.",
+    "checkboxLabel": "I understand this pattern will be published publicly."
+  },
+  "reviewForm": {
+    "titleLabel": "Title",
+    "photoLabel": "Photo (found automatically)",
+    "removePhoto": "Remove this photo",
+    "photoHint": "You can upload a different photo after publishing, from the pattern's Edit page.",
+    "authorLabel": "Original author",
+    "authorPlaceholder": "Unknown",
+    "materialsLabel": "Materials",
+    "abbreviationsLabel": "Abbreviations",
+    "instructionsHeading": "Instructions",
+    "movePartUp": "Move part up",
+    "movePartUpAria": "Move part \"{{part}}\" up",
+    "movePartDown": "Move part down",
+    "movePartDownAria": "Move part \"{{part}}\" down",
+    "deletePart": "Delete part",
+    "deletePartAria": "Delete part \"{{part}}\"",
+    "deleteStepAria": "Delete step {{number}} of \"{{part}}\"",
+    "addStep": "+ Add step",
+    "addPart": "+ Add part"
+  },
+  "patternDetail": {
+    "edit": "Edit",
+    "materials": "Materials",
+    "abbreviations": "Abbreviations",
+    "instructions": "Instructions",
+    "notFound": "Pattern not found.",
+    "translateButton": "Translate to Hebrew",
+    "translating": "Translating...",
+    "translateFailed": "Could not translate this pattern.",
+    "unreviewedNotice": "Machine-translated, not yet reviewed by a person -- stitch terminology may not be fully accurate."
+  },
+  "patternCard": {
+    "save": "Save",
+    "removeSaved": "Remove from Saved"
+  },
+  "attribution": {
+    "uploadedBy": "Uploaded by",
+    "originalByOn": "Original pattern by",
+    "on": "on",
+    "unknownAuthor": "Unknown",
+    "originalSiteFallback": "the original site"
+  },
+  "checklist": {
+    "guestNotice": "You're checking items off as a guest -- progress is saved on this device only. Log in to sync it to your account.",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all",
+    "noInstructions": "No instructions were extracted for this pattern."
+  },
+  "editPattern": {
+    "title": "Edit Pattern",
+    "photoLabel": "Photo of the finished piece",
+    "replacePhoto": "Replace photo",
+    "uploadPhoto": "Upload photo",
+    "uploading": "Uploading...",
+    "removePhoto": "Remove photo",
+    "photoUploadFailed": "Could not upload that photo.",
+    "photoRemoveFailed": "Could not remove the photo.",
+    "saveButton": "Save Changes",
+    "saving": "Saving...",
+    "saveFailed": "Could not save changes.",
+    "permissionDenied": "You don't have permission to edit this pattern.",
+    "notFound": "Pattern not found.",
+    "translationHeading": "Hebrew translation",
+    "translationNotYetAvailable": "This pattern hasn't been translated to Hebrew yet -- visit the pattern's detail page to translate it, then come back here to review/correct it.",
+    "translationTitleLabel": "Title (Hebrew)",
+    "translationMaterialsLabel": "Materials (Hebrew)",
+    "translationAbbreviationsLabel": "Abbreviations (Hebrew)",
+    "translationInstructionsHeading": "Instructions (Hebrew)",
+    "translationReviewedNotice": "Marking these fields as saved also marks the translation as reviewed."
+  },
+  "stitchFiddle": {
+    "title": "Stitch Fiddle Charts",
+    "intro": "Paste a link to one of your public Stitch Fiddle charts. Import turns it into a pattern with a reconstructed chart image and a color list -- written instructions aren't generated (that's a Stitch Fiddle premium feature), so add those yourself afterward via the pattern's Edit page if you want them.",
+    "urlLabel": "Stitch Fiddle chart link",
+    "urlPlaceholder": "https://www.stitchfiddle.com/c/...",
+    "saveButton": "Save link",
+    "saving": "Saving...",
+    "saveFailed": "Could not save that link.",
+    "empty": "No Stitch Fiddle links saved yet.",
+    "viewPattern": "View pattern",
+    "import": "Import",
+    "importing": "Importing...",
+    "importFailed": "Could not import this chart.",
+    "remove": "Remove"
+  },
+  "updateBanner": {
+    "changedNotice": "has changed since you last worked on it. Dismissing this will clear your old checklist progress on it."
+  },
+  "errors": {
+    "missing_fields": "Please fill in all required fields.",
+    "account_already_exists": "A user with that email or username already exists.",
+    "invalid_credentials": "Invalid email or password.",
+    "email_not_verified": "Please verify your email before logging in. Check your inbox for the link.",
+    "missing_verification_token": "Missing verification token.",
+    "invalid_verification_token": "Invalid or already-used verification link.",
+    "verification_token_expired": "This verification link has expired. Request a new one.",
+    "unauthorized": "Please log in to continue.",
+    "url_required": "A URL is required.",
+    "file_required": "A file is required.",
+    "pattern_already_exists": "A pattern from this URL already exists.",
+    "edit_forbidden": "You don't have permission to edit this pattern.",
+    "title_required": "A title is required.",
+    "no_photo": "This pattern has no uploaded photo.",
+    "pattern_not_found": "Pattern not found.",
+    "invalid_progress_step": "That checklist step could not be found.",
+    "link_forbidden": "You don't have permission to do that.",
+    "file_too_large": "That file is too large (max {{max_mb}}MB)."
+  }
+}

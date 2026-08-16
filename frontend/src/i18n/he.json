@@ -1,0 +1,228 @@
+{
+  "common": {
+    "loading": "טוען...",
+    "unknown": "לא ידוע",
+    "or": "או"
+  },
+  "nav": {
+    "brand": "Yarnboard",
+    "community": "קהילה",
+    "submit": "העלאת דוגמית",
+    "myUploads": "הדוגמיות שלי",
+    "mySaved": "השמורים שלי",
+    "stitchFiddle": "Stitch Fiddle",
+    "greeting": "שלום, {{username}}",
+    "logout": "התנתקות",
+    "login": "התחברות",
+    "signup": "הרשמה",
+    "language": "English"
+  },
+  "home": {
+    "welcome": "ברוכים הבאים",
+    "welcomeNamed": "ברוכים הבאים, {{username}}",
+    "subtitle": "הנה איך להפיק את המרב מ-Yarnboard.",
+    "stitchFiddleTitle": "ייבוא תרשים מ-Stitch Fiddle",
+    "stitchFiddleDescription": "שמרו קישור שיתוף מ-stitchfiddle.com, ואז ייבאו אותו בלחיצה אחת. Yarnboard הופך את התרשים לרשת צבעונית שאפשר לצפות בה לצד רשימת צבעים פשוטה -- ללא הוראות כתובות, מכיוון שזו תכונה בתשלום ב-Stitch Fiddle, אך תמיד אפשר להוסיף הוראות משלכם דרך דף העריכה של הדוגמית.",
+    "stitchFiddleCta": "ייבוא תרשים",
+    "submitTitle": "העלאת דוגמית מקישור או קובץ PDF",
+    "submitDescription": "הדביקו קישור לדף דוגמית ו-Yarnboard יחלץ אוטומטית את החומרים, הקיצורים וההוראות. אם אתר חוסם גישה אוטומטית, או שהדוגמית קיימת רק כקובץ PDF (למשל רכישה בתשלום מ-Etsy/Ravelry), אפשר להעלות את הדף השמור או את הקובץ במקום זאת. בכל מקרה, תוכלו לבדוק ולערוך הכול לפני הפרסום.",
+    "submitCta": "העלאת דוגמית",
+    "useTitle": "שימוש בדוגמית קיימת",
+    "useDescription": "עיינו בכל מה שהקהילה פרסמה, שמרו את הדוגמיות שתרצו לחזור אליהן, וסמנו כל שלב הוראה תוך כדי עבודה -- ההתקדמות שלכם נשמרת לכל דוגמית, במיוחד עבורכם.",
+    "useCta": "עיון בקהילה",
+    "editTitle": "עריכת דוגמית שהעליתם",
+    "editDescription": "תקנו טעות כתיב, עדכנו חומרים, או הוסיפו שלבים חסרים בכל דוגמית שהעליתם, מתוך \"הדוגמיות שלי\". שימו לב: עריכת ההוראות של דוגמית מאפסת את התקדמות הצ'קליסט של כולם בה, מכיוון שהשלבים עשויים כבר לא להתאים.",
+    "editCta": "מעבר לדוגמיות שלי"
+  },
+  "auth": {
+    "login": {
+      "title": "התחברות",
+      "emailLabel": "אימייל",
+      "passwordLabel": "סיסמה",
+      "submit": "התחברות",
+      "submitting": "מתחבר...",
+      "failed": "ההתחברות נכשלה.",
+      "resendLink": "שליחה חוזרת של מייל אימות",
+      "resendSent": "מייל האימות נשלח -- בדקו את תיבת הדואר שלכם.",
+      "resendFailed": "לא ניתן לשלוח כרגע -- נסו שוב בקרוב."
+    },
+    "register": {
+      "title": "יצירת חשבון",
+      "usernameLabel": "שם משתמש",
+      "emailLabel": "אימייל",
+      "passwordLabel": "סיסמה",
+      "submit": "הרשמה",
+      "submitting": "יוצר חשבון...",
+      "failed": "ההרשמה נכשלה.",
+      "checkEmailTitle": "בדקו את תיבת הדואר שלכם",
+      "checkEmailBody": "שלחנו קישור אימות לכתובת {{email}}. לחצו עליו כדי להפעיל את החשבון, ואז חִזרו להתחבר.",
+      "goToLogin": "מעבר להתחברות"
+    },
+    "verify": {
+      "title": "אימות אימייל",
+      "verifying": "מאמת...",
+      "missingToken": "בקישור האימות הזה חסר קוד אימות.",
+      "failed": "האימות נכשל.",
+      "goToLogin": "מעבר להתחברות",
+      "backToLogin": "חזרה להתחברות"
+    }
+  },
+  "community": {
+    "title": "דוגמיות הקהילה",
+    "empty": "עדיין לא פורסמו דוגמיות.",
+    "guestNotice": "אתם גולשים כאורחים -- תוכלו לצפות בכל הדוגמיות ולסמן שלבים תוך כדי עבודה. רוצים לשמור דוגמיות או להעלות משלכם?",
+    "guestNoticeUploadLink": "כך עובדת ההעלאה",
+    "guestNoticeSignupLink": "הרשמה"
+  },
+  "myUploads": {
+    "title": "הדוגמיות שלי",
+    "empty": "עדיין לא העליתם דוגמיות.",
+    "submitOne": "העלאת דוגמית"
+  },
+  "mySaved": {
+    "title": "הדוגמיות השמורות שלי",
+    "empty": "עדיין לא שמרתם דוגמיות. עיינו ב",
+    "communityPage": "קהילה",
+    "emptyTail": "כדי למצוא כמה."
+  },
+  "submit": {
+    "title": "העלאת דוגמית",
+    "intro": "הדביקו קישור לדף דוגמית סריגה או קרושה. נחלץ את הכותרת, החומרים, הקיצורים וההוראות כדי שתוכלו לבדוק אותם לפני הפרסום.",
+    "urlLabel": "קישור לדוגמית",
+    "urlPlaceholder": "https://example.com/my-pattern",
+    "previewButton": "תצוגה מקדימה",
+    "fetching": "טוען...",
+    "genericFetchError": "לא ניתן היה לטעון את הדף. בדקו את הקישור ונסו שוב.",
+    "uploadFallbackIntro": "לא ניתן היה לטעון את הדף אוטומטית -- חלק מהאתרים חוסמים בקשות אוטומטיות. אם שמרתם את הדף כקובץ HTML (פתחו אותו בדפדפן, ואז \"שמירת דף בשם...\" ובחרו \"דף אינטרנט, HTML בלבד\"), או את הדוגמית כקובץ PDF (למשל דוגמית בתשלום מ-Etsy/Ravelry), תוכלו להעלות אותו כאן במקום זאת. הקישור למעלה עדיין משמש לזיכוי המקור המקורי ולמניעת כפילויות.",
+    "uploadFileLabel": "קובץ HTML או PDF שמור",
+    "uploadButton": "תצוגה מקדימה מקובץ",
+    "processing": "מעבד...",
+    "genericUploadError": "לא ניתן היה לעבד את הקובץ.",
+    "guestPromptLogin": "התחברו",
+    "guestPromptSignup": "הירשמו",
+    "guestPromptTail": "כדי להעלות דוגמית בפועל -- העלאות משויכות לחשבון כדי שתוכלו לערוך אותן מאוחר יותר.",
+    "alreadyHaveIntro": "כבר יש לכם את הדוגמית הזו שמורה? בדקו את דף ה",
+    "communityPage": "קהילה",
+    "alreadyHaveTail": "קודם -- Yarnboard נמנע משמירת אותו קישור מקור פעמיים."
+  },
+  "review": {
+    "title": "בדיקה לפני פרסום",
+    "sourceLabel": "מקור: {{url}}",
+    "publishButton": "פרסום דוגמית",
+    "publishing": "מפרסם...",
+    "publishFailed": "הפרסום נכשל."
+  },
+  "publishConsent": {
+    "introLead": "פרסום ל-Yarnboard:",
+    "intro": "הדוגמית הזו תישמר בספריית הקהילה המשותפת של Yarnboard ותהיה גלויה לכל המשתמשים, יחד עם שם המשתמש שלכם וקישור למקור המקורי. אנא העלו רק דוגמיות שיש לכם זכות לשתף, ובִדקו את התוכן שחולץ למעלה לדיוק לפני הפרסום.",
+    "checkboxLabel": "אני מבין/ה שהדוגמית הזו תפורסם באופן פומבי."
+  },
+  "reviewForm": {
+    "titleLabel": "כותרת",
+    "photoLabel": "תמונה (נמצאה אוטומטית)",
+    "removePhoto": "הסרת התמונה",
+    "photoHint": "תוכלו להעלות תמונה אחרת אחרי הפרסום, מדף העריכה של הדוגמית.",
+    "authorLabel": "יוצר/ת מקורי/ת",
+    "authorPlaceholder": "לא ידוע",
+    "materialsLabel": "חומרים",
+    "abbreviationsLabel": "קיצורים",
+    "instructionsHeading": "הוראות",
+    "movePartUp": "הזזת חלק למעלה",
+    "movePartUpAria": "הזזת חלק \"{{part}}\" למעלה",
+    "movePartDown": "הזזת חלק למטה",
+    "movePartDownAria": "הזזת חלק \"{{part}}\" למטה",
+    "deletePart": "מחיקת חלק",
+    "deletePartAria": "מחיקת חלק \"{{part}}\"",
+    "deleteStepAria": "מחיקת שלב {{number}} מתוך \"{{part}}\"",
+    "addStep": "+ הוספת שלב",
+    "addPart": "+ הוספת חלק"
+  },
+  "patternDetail": {
+    "edit": "עריכה",
+    "materials": "חומרים",
+    "abbreviations": "קיצורים",
+    "instructions": "הוראות",
+    "notFound": "הדוגמית לא נמצאה.",
+    "translateButton": "תרגום לעברית",
+    "translating": "מתרגם...",
+    "translateFailed": "לא ניתן היה לתרגם את הדוגמית.",
+    "unreviewedNotice": "תורגם אוטומטית, טרם נבדק על ידי אדם -- מונחי הסריגה/הקרושה עשויים לא להיות מדויקים לגמרי."
+  },
+  "patternCard": {
+    "save": "שמירה",
+    "removeSaved": "הסרה מהשמורים"
+  },
+  "attribution": {
+    "uploadedBy": "הועלה על ידי",
+    "originalByOn": "דוגמית מקורית מאת",
+    "on": "באתר",
+    "unknownAuthor": "לא ידוע",
+    "originalSiteFallback": "האתר המקורי"
+  },
+  "checklist": {
+    "guestNotice": "אתם מסמנים פריטים כאורחים -- ההתקדמות נשמרת במכשיר זה בלבד. התחברו כדי לסנכרן אותה לחשבון שלכם.",
+    "collapseAll": "כיווץ הכול",
+    "expandAll": "הרחבת הכול",
+    "noInstructions": "לא חולצו הוראות עבור הדוגמית הזו."
+  },
+  "editPattern": {
+    "title": "עריכת דוגמית",
+    "photoLabel": "תמונה של הפריט המוגמר",
+    "replacePhoto": "החלפת תמונה",
+    "uploadPhoto": "העלאת תמונה",
+    "uploading": "מעלה...",
+    "removePhoto": "הסרת תמונה",
+    "photoUploadFailed": "לא ניתן היה להעלות את התמונה.",
+    "photoRemoveFailed": "לא ניתן היה להסיר את התמונה.",
+    "saveButton": "שמירת שינויים",
+    "saving": "שומר...",
+    "saveFailed": "לא ניתן היה לשמור את השינויים.",
+    "permissionDenied": "אין לכם הרשאה לערוך את הדוגמית הזו.",
+    "notFound": "הדוגמית לא נמצאה.",
+    "translationHeading": "תרגום לעברית",
+    "translationNotYetAvailable": "הדוגמית הזו עדיין לא תורגמה לעברית -- בקרו בדף הדוגמית כדי לתרגם אותה, ואז חִזרו לכאן כדי לבדוק/לתקן.",
+    "translationTitleLabel": "כותרת (עברית)",
+    "translationMaterialsLabel": "חומרים (עברית)",
+    "translationAbbreviationsLabel": "קיצורים (עברית)",
+    "translationInstructionsHeading": "הוראות (עברית)",
+    "translationReviewedNotice": "שמירת השדות האלה גם מסמנת את התרגום כנבדק."
+  },
+  "stitchFiddle": {
+    "title": "תרשימי Stitch Fiddle",
+    "intro": "הדביקו קישור לאחד מתרשימי ה-Stitch Fiddle הציבוריים שלכם. ייבוא הופך אותו לדוגמית עם תמונת תרשים משוחזרת ורשימת צבעים -- הוראות כתובות לא נוצרות (זו תכונה בתשלום ב-Stitch Fiddle), אז הוסיפו אותן בעצמכם אחר כך דרך דף העריכה של הדוגמית אם תרצו.",
+    "urlLabel": "קישור לתרשים Stitch Fiddle",
+    "urlPlaceholder": "https://www.stitchfiddle.com/c/...",
+    "saveButton": "שמירת קישור",
+    "saving": "שומר...",
+    "saveFailed": "לא ניתן היה לשמור את הקישור.",
+    "empty": "עדיין לא נשמרו קישורי Stitch Fiddle.",
+    "viewPattern": "צפייה בדוגמית",
+    "import": "ייבוא",
+    "importing": "מייבא...",
+    "importFailed": "לא ניתן היה לייבא את התרשים.",
+    "remove": "הסרה"
+  },
+  "updateBanner": {
+    "changedNotice": "השתנתה מאז שעבדתם עליה לאחרונה. סגירת ההודעה תמחק את התקדמות הצ'קליסט הישנה שלכם בה."
+  },
+  "errors": {
+    "missing_fields": "אנא מלאו את כל השדות הנדרשים.",
+    "account_already_exists": "כבר קיים משתמש עם האימייל או שם המשתמש הזה.",
+    "invalid_credentials": "אימייל או סיסמה שגויים.",
+    "email_not_verified": "אנא אמתו את כתובת האימייל שלכם לפני ההתחברות. בדקו את תיבת הדואר שלכם לקישור.",
+    "missing_verification_token": "חסר קוד אימות.",
+    "invalid_verification_token": "קישור האימות אינו תקין או שכבר נעשה בו שימוש.",
+    "verification_token_expired": "קישור האימות פג תוקף. בקשו קישור חדש.",
+    "unauthorized": "אנא התחברו כדי להמשיך.",
+    "url_required": "יש להזין קישור.",
+    "file_required": "יש לבחור קובץ.",
+    "pattern_already_exists": "כבר קיימת דוגמית מהקישור הזה.",
+    "edit_forbidden": "אין לכם הרשאה לערוך את הדוגמית הזו.",
+    "title_required": "יש להזין כותרת.",
+    "no_photo": "לדוגמית הזו אין תמונה שהועלתה.",
+    "pattern_not_found": "הדוגמית לא נמצאה.",
+    "invalid_progress_step": "לא ניתן היה למצוא את שלב הצ'קליסט הזה.",
+    "link_forbidden": "אין לכם הרשאה לבצע פעולה זו.",
+    "file_too_large": "הקובץ גדול מדי (מקסימום {{max_mb}}MB)."
+  }
+}

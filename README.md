@@ -138,6 +138,11 @@ frontend/backend services) -- Flask serves the built React app itself.
    Same deal again if it predates the Stitch Fiddle chart-import feature:
    also run
    `DATABASE_URL=<neon-connection-string> flask --app wsgi add-chart-grid-columns`.
+   Same deal again if it predates email verification: also run
+   `DATABASE_URL=<neon-connection-string> flask --app wsgi add-email-verification-columns`
+   (this one backfills existing accounts as already-verified so nobody gets
+   locked out retroactively -- see the command's docstring in
+   `app/__init__.py`).
 5. Grant yourself edit-any-pattern rights once:
    `DATABASE_URL=<neon-connection-string> flask --app wsgi make-admin you@example.com`.
 
@@ -145,7 +150,6 @@ frontend/backend services) -- Flask serves the built React app itself.
 
 - The scraper is heuristic and best-effort; it's designed to feed a human
   review step, not to be a guaranteed-correct parser for every pattern site.
-- No email verification on signup.
 - Editing a pattern invalidates progress pattern-wide, not per-part -- a
   typo fix in one step resets everyone's checklist on the whole pattern,
   not just that step. A deliberate trade-off for a simple, lazy
@@ -157,8 +161,9 @@ frontend/backend services) -- Flask serves the built React app itself.
 - No migration tool (Alembic, etc.) -- schema setup is a one-off
   `flask init-db` command for new databases, plus purely-additive
   `flask add-versioning-columns` / `add-photo-columns` /
-  `add-chart-grid-columns` commands for upgrading an existing one;
-  appropriate for the app's current size and rate of schema change.
+  `add-chart-grid-columns` / `add-email-verification-columns` commands for
+  upgrading an existing one; appropriate for the app's current size and
+  rate of schema change.
 - Manually-uploaded pattern photos are stored as bytes directly in
   Postgres (re-encoded as JPEG, capped at 1600px/2MB raw upload) rather
   than a dedicated object store -- simplest option given Render's web
