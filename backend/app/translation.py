@@ -173,7 +173,9 @@ def translate_pattern_to_hebrew(
         )
         response.raise_for_status()
     except requests.RequestException as exc:
-        raise TranslationError(f"Gemini API request failed: {exc}") from exc
+        raise TranslationError(
+            f"Gemini API request failed: {str(exc).replace(api_key, '<redacted>')}"
+        ) from exc
 
     try:
         raw_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
