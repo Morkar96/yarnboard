@@ -10,6 +10,7 @@
     "submit": "Submit a Pattern",
     "myUploads": "My Uploads",
     "mySaved": "My Saved",
+    "sharedWithMe": "Shared with Me",
     "stitchFiddle": "Stitch Fiddle",
     "greeting": "Hi, {{username}}",
     "logout": "Log out",
@@ -25,7 +26,7 @@
     "stitchFiddleDescription": "Save a stitchfiddle.com share link, then import it with one click. Yarnboard turns the chart into a colored grid you can view alongside a plain color-key list -- no written instructions, since that's a premium Stitch Fiddle feature, but you can always add your own via the pattern's Edit page afterwards.",
     "stitchFiddleCta": "Import a chart",
     "submitTitle": "Submit a pattern from a URL or PDF",
-    "submitDescription": "Paste a link to a pattern page and Yarnboard scrapes the materials, abbreviations, and instructions automatically. If a site blocks automatic fetching, or the pattern only exists as a PDF (e.g. a paid Etsy/Ravelry download), upload the saved page or PDF instead. Either way, you review and can edit everything before it's published.",
+    "submitDescription": "Paste a link to a pattern page and Yarnboard scrapes the materials, abbreviations, and instructions automatically. If a site blocks automatic fetching, or the pattern only exists as a PDF (e.g. a paid Etsy/Ravelry download), upload the saved page or PDF instead. Either way, you review and can edit everything, and it's saved privately to your account -- you choose when (or whether) to publish it to the community.",
     "submitCta": "Submit a pattern",
     "useTitle": "Use an existing pattern",
     "useDescription": "Browse everything the community has published, save the ones you want to come back to, and check off each instruction step as you work -- your progress is tracked per pattern, just for you.",
@@ -85,6 +86,10 @@
     "communityPage": "Community",
     "emptyTail": "page to find some."
   },
+  "sharedWithMe": {
+    "title": "Shared with Me",
+    "empty": "Nobody has shared a pattern with you yet."
+  },
   "submit": {
     "title": "Submit a Pattern",
     "intro": "Paste a link to a knitting or crochet pattern webpage. We'll pull out the title, materials, abbreviations, and instructions for you to review before publishing.",
@@ -106,16 +111,19 @@
     "alreadyHaveTail": "page first -- Yarnboard avoids storing the same source URL twice."
   },
   "review": {
-    "title": "Review before publishing",
+    "title": "Review before saving",
     "sourceLabel": "Source: {{url}}",
-    "publishButton": "Publish Pattern",
-    "publishing": "Publishing...",
-    "publishFailed": "Publishing failed."
+    "saveNotice": "This pattern is saved privately to your account -- only you (and admins) can see it until you choose to publish it to the community from the pattern's page.",
+    "saveButton": "Save Pattern",
+    "saving": "Saving...",
+    "saveFailed": "Saving failed."
   },
   "publishConsent": {
     "introLead": "Publishing to Yarnboard:",
-    "intro": "this pattern will be saved to the shared Yarnboard community library and visible to all users, along with your username and a link back to the original source. Please only submit patterns you have the right to share, and review the extracted content above for accuracy before publishing.",
-    "checkboxLabel": "I understand this pattern will be published publicly."
+    "intro": "this pattern will become visible to the whole Yarnboard community, along with your username and a link back to the original source. Please only publish patterns you have the right to share, and review the content for accuracy first.",
+    "checkboxLabel": "I understand this pattern will be published publicly.",
+    "confirmButton": "Confirm & Publish",
+    "cancelButton": "Cancel"
   },
   "reviewForm": {
     "titleLabel": "Title",
@@ -150,7 +158,22 @@
   },
   "patternCard": {
     "save": "Save",
-    "removeSaved": "Remove from Saved"
+    "removeSaved": "Remove from Saved",
+    "private": "Private"
+  },
+  "visibility": {
+    "public": "Public",
+    "private": "Private",
+    "publishButton": "Publish to Community",
+    "publishing": "Publishing...",
+    "publishFailed": "Could not publish this pattern.",
+    "sharedWithHeading": "Shared with",
+    "noShares": "Not shared with anyone yet.",
+    "removeShare": "Remove",
+    "shareUsernamePlaceholder": "Username",
+    "shareButton": "Share",
+    "sharing": "Sharing...",
+    "shareFailed": "Could not share this pattern."
   },
   "attribution": {
     "uploadedBy": "Uploaded by",
@@ -223,6 +246,7 @@
     "pattern_not_found": "Pattern not found.",
     "invalid_progress_step": "That checklist step could not be found.",
     "link_forbidden": "You don't have permission to do that.",
-    "file_too_large": "That file is too large (max {{max_mb}}MB)."
+    "file_too_large": "That file is too large (max {{max_mb}}MB).",
+    "cannot_share_with_uploader": "The uploader already has access to their own pattern."
   }
 }

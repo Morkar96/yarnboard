@@ -1,12 +1,18 @@
 """
 Database models for Yarnboard.
 
-Three tables:
+Tables:
   - User: an account. Tracks patterns it uploaded (one-to-many) and patterns
     it bookmarked from the community (many-to-many, via saved_patterns).
   - Pattern: a single knitting/crochet pattern, scraped from a source URL.
-    Patterns are shared/public once submitted -- every user sees the same
-    row -- and are deduplicated on `original_url`.
+    Private by default -- visible only to its uploader and admins -- until
+    the uploader explicitly publishes it (Pattern.is_public); see
+    PatternShare below for the narrower "just these specific people" option
+    in between. `original_url` is deduplicated per-uploader always, and
+    globally only among published patterns -- see
+    Pattern.find_duplicate's docstring.
+  - PatternShare: an uploader-granted view-only exception for one specific
+    other user, independent of is_public.
   - UserPatternProgress: which checklist steps a *specific* user has ticked
     off on a *specific* pattern. This is intentionally its own table rather
     than a field on Pattern -- see its docstring below for why.
@@ -76,10 +82,17 @@ class Pattern(db.Model):
     user who views/saves the pattern, so per-user checklist state is tracked
     separately in UserPatternProgress and merged in at read time by
     to_dict(current_user_id=...).
+
+    Visibility: every new pattern starts private (is_public=False) --
+    visible only to its uploader, admins, and anyone explicitly granted
+    access via PatternShare. The uploader (or an admin) can publish it to
+    the whole community at any time via POST /<id>/publish, which is
+    one-way -- there's no unpublish. See patterns/routes.py's _can_view for
+    the actual visibility check used by every read endpoint.
     """
 
     id = db.Column(db.Integer, primary_key=True)
-    original_url = db.Column(db.String(512), unique=True, nullable=False)
+    original_url = db.Column(db.String(512), nullable=False)
     title = db.Column(db.String(200), nullable=False)
 
     # Attribution to the *original* creator/site, as distinct from the
@@ -156,6 +169,25 @@ class Pattern(db.Model):
     uploader_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
 
+    # Python-side default=False governs new inserts (every new pattern
+    # starts private); the add-pattern-visibility-columns migration in
+    # app/__init__.py backfills existing rows as TRUE instead, the same
+    # "grandfather existing data in, gate only what's new" split
+    # email_verified's docstring above describes -- patterns that were
+    # already community-visible before this feature existed shouldn't
+    # suddenly vanish from it.
+    is_public = db.Column(db.Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        # original_url was globally unique before sharing/visibility
+        # existed; now it's unique per-uploader (each user may hold their
+        # own private copy of the same source), with global uniqueness
+        # enforced only among published rows at the application layer --
+        # see find_duplicate below and patterns/routes.py's publish
+        # endpoint, which is where a second *public* copy is rejected.
+        db.UniqueConstraint("original_url", "uploader_id", name="uq_pattern_original_url_uploader"),
+    )
+
     @staticmethod
     def derive_source_domain(url: str) -> str:
         """Bare-domain fallback (e.g. 'ravelry.com') used when a page has no
@@ -163,6 +195,28 @@ class Pattern(db.Model):
         need to recompute it without re-scraping."""
         netloc = urlparse(url).netloc
         return netloc[4:] if netloc.startswith("www.") else netloc
+
+    @staticmethod
+    def find_duplicate(original_url: str, uploader_id: int):
+        """
+        The existing pattern a new submission/import of `original_url`
+        should be treated as a duplicate of, if any -- used by both the
+        submit/import dedup checks and /preview's "you already have this"
+        short-circuit.
+
+        Two cases: this uploader already has their own copy of this URL
+        (public or still-private -- resubmitting should just point back at
+        it, not create a second row, which the unique constraint above
+        would reject anyway), or *anyone's* copy is already published
+        (only one canonical public row per URL, regardless of who
+        uploaded it -- a still-private pattern from someone else doesn't
+        count as a duplicate, since the new uploader can't see it and is
+        entitled to their own private copy).
+        """
+        return Pattern.query.filter(
+            Pattern.original_url == original_url,
+            db.or_(Pattern.is_public.is_(True), Pattern.uploader_id == uploader_id),
+        ).first()
 
     def to_dict(self, current_user_id=None):
         """
@@ -243,6 +297,7 @@ class Pattern(db.Model):
             },
             "uploader": self.uploader.username if self.uploader else "Unknown",
             "uploader_id": self.uploader_id,
+            "is_public": self.is_public,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -332,5 +387,42 @@ class StitchFiddleLink(db.Model):
             "share_url": self.share_url,
             "chart_id": self.chart_id,
             "imported_pattern_id": self.imported_pattern_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class PatternShare(db.Model):
+    """
+    A view-only access grant: the uploader (or an admin) lets one specific
+    other user see a pattern that isn't public yet, without publishing it
+    to the whole community. Independent of Pattern.is_public -- a pattern
+    can be private-with-three-shares, fully public (shares become moot,
+    everyone can already see it, but aren't cleared), or private with none.
+
+    Grants viewing only, never editing -- _can_edit in patterns/routes.py
+    is unaffected by this table; a shared user sees the pattern and can
+    track their own checklist progress on it (same as any other viewer)
+    but can't change its content.
+    """
+
+    id = db.Column(db.Integer, primary_key=True)
+    pattern_id = db.Column(db.Integer, db.ForeignKey("pattern.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+    pattern = db.relationship(
+        "Pattern", backref=db.backref("shares", lazy=True, cascade="all, delete-orphan")
+    )
+    user = db.relationship("User")
+
+    __table_args__ = (
+        db.UniqueConstraint("pattern_id", "user_id", name="uq_pattern_share"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "username": self.user.username if self.user else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

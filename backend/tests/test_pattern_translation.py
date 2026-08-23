@@ -110,11 +110,14 @@ def test_translate_requires_login(client):
 
 def test_translate_any_logged_in_user_can_trigger_it(client, monkeypatch):
     """Unlike editing, translating isn't gated by _can_edit -- it doesn't
-    change the pattern's authoritative English content."""
+    change the pattern's authoritative English content. It's still gated
+    by _can_view though, so the pattern needs to actually be visible to
+    "any" user -- published here, for exactly that reason."""
     monkeypatch.setattr(translation, "translate_pattern_to_hebrew", _fake_translate)
     owner_email = _register(client, "owner")
     _login(client, owner_email)
     pattern = _submit_pattern(client)
+    client.post(f"/api/patterns/{pattern['id']}/publish")
 
     other_email = _register(client, "other")
     _login(client, other_email)

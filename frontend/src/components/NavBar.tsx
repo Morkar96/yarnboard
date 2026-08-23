@@ -46,6 +46,9 @@ export default function NavBar() {
                 <Nav.Link as={Link} to="/saved">
                   {t("nav.mySaved")}
                 </Nav.Link>
+                <Nav.Link as={Link} to="/shared-with-me">
+                  {t("nav.sharedWithMe")}
+                </Nav.Link>
                 <Nav.Link as={Link} to="/stitch-fiddle">
                   {t("nav.stitchFiddle")}
                 </Nav.Link>

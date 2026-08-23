@@ -4,7 +4,7 @@
  * + original-source credit is visible everywhere a pattern appears, not
  * just on its detail page.
  */
-import { Button, Card } from "react-bootstrap";
+import { Badge, Button, Card } from "react-bootstrap";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { resolvePhotoUrl } from "../api/client";
@@ -38,9 +38,16 @@ export default function PatternCard({ pattern, onToggleSave, isSaved }: Props) {
         />
       )}
       <Card.Body className="d-flex flex-column">
-        <Card.Title as={Link} to={`/pattern/${pattern.id}`} className="link-primary text-decoration-none">
-          {title}
-        </Card.Title>
+        <div className="d-flex justify-content-between align-items-start gap-2">
+          <Card.Title as={Link} to={`/pattern/${pattern.id}`} className="link-primary text-decoration-none">
+            {title}
+          </Card.Title>
+          {!pattern.is_public && (
+            <Badge bg="secondary" className="mt-1">
+              {t("patternCard.private")}
+            </Badge>
+          )}
+        </div>
         <AttributionTag pattern={pattern} />
         {onToggleSave && (
           <Button

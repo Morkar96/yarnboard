@@ -3,10 +3,12 @@ Stitch Fiddle chart-import endpoints: save/list/remove a share link, and
 turn one into a real Pattern on demand ("Import").
 
 Deliberately separate from patterns/routes.py: a StitchFiddleLink is
-private per-user data (only its owner can see or act on it), unlike
-Pattern rows, which are public/shared community-wide the moment they
-exist. See backend/app/stitchfiddle.py for the actual fetch/decode
-mechanics -- this file is orchestration only.
+private per-user data (only its owner can see or act on it) regardless of
+what happens to the Pattern it eventually becomes -- which itself starts
+private too (see Pattern.is_public's docstring in models.py) and stays
+that way until its uploader explicitly publishes it. See
+backend/app/stitchfiddle.py for the actual fetch/decode mechanics -- this
+file is orchestration only.
 """
 
 from flask import Blueprint, jsonify, request
@@ -145,15 +147,19 @@ def import_link(link_id):
         return jsonify({"error": str(exc), "code": "stitchfiddle_fetch_error"}), 502
 
     # Someone (possibly this same user, via a normal manual submit) may
-    # have already published a Pattern for this exact URL -- link to it
-    # instead of creating a duplicate, same dedup-by-original_url
-    # philosophy as the rest of this app's Pattern table.
-    existing = Pattern.query.filter_by(original_url=link.share_url).first()
+    # already have a Pattern for this exact URL -- link to it instead of
+    # creating a duplicate, same dedup-by-original_url philosophy as the
+    # rest of this app's Pattern table. find_duplicate only matches a
+    # published pattern (any uploader) or this same uploader's own
+    # (possibly still-private) copy -- someone else's private pattern for
+    # this URL doesn't count, they're entitled to their own private import.
+    existing = Pattern.find_duplicate(link.share_url, user_id)
     if existing:
         link.imported_pattern_id = existing.id
         db.session.commit()
         return jsonify({
-            "message": "This chart was already published to the community.",
+            "message": "This chart was already published to the community."
+            if existing.is_public else "You already imported this chart.",
             "pattern": existing.to_dict(current_user_id=user_id),
         }), 200
 
@@ -174,11 +180,12 @@ def import_link(link_id):
     try:
         db.session.commit()
     except IntegrityError:
-        # Race: another request (or another of this user's own tabs)
-        # published/imported this same URL between our check above and
-        # this commit -- link to whichever row won instead of failing.
+        # Race: another of this user's own tabs/requests imported or
+        # submitted this same URL between our check above and this commit
+        # -- the (original_url, uploader_id) constraint is what caught it,
+        # so that's the row to link to instead of failing.
         db.session.rollback()
-        pattern = Pattern.query.filter_by(original_url=link.share_url).first()
+        pattern = Pattern.query.filter_by(original_url=link.share_url, uploader_id=user_id).first()
 
     link.imported_pattern_id = pattern.id
     db.session.commit()
