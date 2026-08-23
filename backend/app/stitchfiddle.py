@@ -119,14 +119,24 @@ def fetch_chart(share_url: str) -> dict:
     }
 
 
-def decode_grid(rows_field: str, column_count: int, row_count: int) -> bytes:
+def decode_grid(rows_field: list[str], column_count: int, row_count: int) -> bytes:
     """
     Decode grid.rows into one byte per cell, row-major, each byte a
-    0-indexed lookup into the chart's palette. The field is a "1:" prefix
-    (a format marker, not a row number -- the whole grid is one blob, not
-    per-row segments) followed by a single base64 blob.
+    0-indexed lookup into the chart's palette.
+
+    Stitch Fiddle's API returns this field as a list of string segments,
+    not one combined string (confirmed live -- every chart fetched so far
+    is a single-element list, but the shape itself is always a list).
+    Join the segments into one base64 stream before decoding: the first
+    segment has a "1:" prefix (a format marker, not a row number -- the
+    whole grid is one blob, not per-row segments), which is stripped
+    before joining; if Stitch Fiddle ever does split a grid across
+    multiple segments, the byte-count check below still catches a bad
+    join rather than silently producing a corrupt grid.
     """
-    _, _, encoded = rows_field.partition(":")
+    first, *rest = rows_field
+    _, _, encoded = first.partition(":")
+    encoded = "".join([encoded, *rest])
     padded = encoded + "=" * (-len(encoded) % 4)
     decoded = base64.b64decode(padded)
 
