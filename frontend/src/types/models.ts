@@ -42,6 +42,21 @@ export interface Pattern {
   translations: PatternTranslations;
   uploader: string;
   uploader_id: number;
+  /** Private (false, the default for a new pattern) until the uploader
+   * explicitly publishes it -- see POST /api/patterns/<id>/publish. A
+   * private pattern may still be visible to specific other users via
+   * PatternShare (see the shares endpoints in client.ts) without being
+   * public to everyone. */
+  is_public: boolean;
+  created_at: string | null;
+}
+
+/** One user a pattern has been individually shared with (see POST/GET/
+ * DELETE /api/patterns/<id>/shares) -- independent of Pattern.is_public. */
+export interface PatternShare {
+  id: number;
+  user_id: number;
+  username: string;
   created_at: string | null;
 }
 

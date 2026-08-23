@@ -1,16 +1,26 @@
 """
-Pattern endpoints: scrape-preview, submit/publish, edit, the three list
-views (mine / saved / community), pattern detail, per-user checklist
-progress, and change notifications.
+Pattern endpoints: scrape-preview, submit, edit, publish/share (visibility),
+the four list views (mine / saved / community / shared-with-me), pattern
+detail, per-user checklist progress, and change notifications.
 
 Endpoints that matter most for correctness:
   - POST /preview never writes to the database -- it's pure "show me what
     you'd get" so the user can review before publishing.
-  - POST /submit is the only endpoint that creates a Pattern row, and it
-    re-checks the URL uniqueness right before inserting (in addition to the
-    DB-level unique constraint) so two near-simultaneous submissions of the
-    same URL can't both succeed.
-  - PATCH /<id> is the only endpoint that edits a published Pattern row.
+  - POST /submit is the only endpoint here that creates a Pattern row
+    (stitch_fiddle/routes.py's import_link is the other one) -- always
+    private (see Pattern.is_public's docstring in models.py), and it
+    re-checks Pattern.find_duplicate right before inserting (in addition to
+    the DB-level unique constraint on (original_url, uploader_id)) so two
+    near-simultaneous submissions from the same uploader can't both
+    succeed.
+  - POST /<id>/publish is the only endpoint that makes a pattern
+    community-visible; it's where a second public copy of the same URL
+    gets rejected, since the DB constraint alone no longer enforces global
+    uniqueness (see Pattern.find_duplicate).
+  - GET /<id>, GET /community, PATCH /<id>/progress, and POST
+    /saved all go through _can_view -- see its docstring for the
+    visibility rule.
+  - PATCH /<id> is the only endpoint that edits a pattern's content.
     Editing `instructions` invalidates other users' checklist progress on
     it (see UserPatternProgress.pattern_version's docstring in models.py);
     this endpoint, toggle_progress, and /acknowledge-update are the three
@@ -25,7 +35,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from .. import photo, translation
 from ..email import send_pattern_updated_email
 from ..extensions import db
-from ..models import Pattern, User, UserPatternProgress
+from ..models import Pattern, PatternShare, User, UserPatternProgress
 from ..scraper import parse_pattern_html, parse_pattern_pdf, scrape_pattern_from_url, ScraperError
 from ..utils import get_current_user_id
 
@@ -43,6 +53,22 @@ def _require_login():
 def _can_edit(user: User, pattern: Pattern) -> bool:
     """Admins can edit any pattern; everyone else only their own uploads."""
     return user.is_admin or pattern.uploader_id == user.id
+
+
+def _can_view(user: User | None, pattern: Pattern) -> bool:
+    """Public patterns are visible to anyone, including a logged-out
+    guest. A private one is visible only to its uploader, an admin, or a
+    user explicitly granted access via PatternShare -- everyone else gets
+    treated exactly like the pattern doesn't exist (see get_pattern's 404,
+    not 403: a private pattern's existence isn't itself something to
+    reveal to someone who can't see it)."""
+    if pattern.is_public:
+        return True
+    if user is None:
+        return False
+    if user.is_admin or pattern.uploader_id == user.id:
+        return True
+    return PatternShare.query.filter_by(pattern_id=pattern.id, user_id=user.id).first() is not None
 
 
 def _validate_instructions_he(instructions: dict, instructions_he) -> str | None:
@@ -74,13 +100,13 @@ def _validate_instructions_he(instructions: dict, instructions_he) -> str | None
     return None
 
 
-def _existing_pattern_response(url: str):
-    """If `url` is already published, the short-circuit response for
-    /preview and /preview-upload alike: duplicate=True plus its id, so the
-    frontend can offer "view the existing pattern" instead of a review
-    form for content that would just fail to save later. Returns None if
-    there's no existing pattern for this URL."""
-    existing = Pattern.query.filter_by(original_url=url).first()
+def _existing_pattern_response(url: str, uploader_id: int):
+    """If `url` is already a duplicate for this uploader (see
+    Pattern.find_duplicate), the short-circuit response for /preview and
+    /preview-upload alike: duplicate=True plus its id, so the frontend can
+    offer "view the existing pattern" instead of a review form for content
+    that would just fail to save later. Returns None otherwise."""
+    existing = Pattern.find_duplicate(url, uploader_id)
     if not existing:
         return None
     return jsonify({
@@ -103,7 +129,7 @@ def preview_pattern():
     if not url:
         return jsonify({"error": "url is required", "code": "url_required"}), 400
 
-    duplicate_response = _existing_pattern_response(url)
+    duplicate_response = _existing_pattern_response(url, user_id)
     if duplicate_response:
         return duplicate_response
 
@@ -156,7 +182,7 @@ def preview_pattern_from_upload():
     if not uploaded or not uploaded.filename:
         return jsonify({"error": "html_file is required", "code": "file_required"}), 400
 
-    duplicate_response = _existing_pattern_response(url)
+    duplicate_response = _existing_pattern_response(url, user_id)
     if duplicate_response:
         return duplicate_response
 
@@ -180,11 +206,12 @@ def preview_pattern_from_upload():
 @patterns_bp.route("/submit", methods=["POST"])
 def submit_pattern():
     """
-    Save a user-reviewed draft as a published Pattern.
+    Save a user-reviewed draft as a new, private Pattern row -- the
+    uploader publishes it to the community explicitly, later, via POST
+    /<id>/publish; submitting never does that itself.
 
     Expects the (possibly hand-edited) fields the /preview draft contained,
-    plus original_url. This is the only place a Pattern row gets created --
-    publishing only happens once a human has confirmed the content.
+    plus original_url. This is the only place a Pattern row gets created.
     """
     user_id, error = _require_login()
     if error:
@@ -199,7 +226,7 @@ def submit_pattern():
             "code": "missing_fields",
         }), 400
 
-    if Pattern.query.filter_by(original_url=original_url).first():
+    if Pattern.find_duplicate(original_url, user_id):
         return jsonify({
             "error": "A pattern from this URL already exists.",
             "code": "pattern_already_exists",
@@ -231,7 +258,7 @@ def submit_pattern():
         }), 409
 
     return jsonify({
-        "message": "Pattern successfully published to the Yarnboard community.",
+        "message": "Pattern saved. It's private until you publish it to the community.",
         "pattern": pattern.to_dict(current_user_id=user_id),
     }), 201
 
@@ -320,6 +347,146 @@ def edit_pattern(pattern_id):
     }), 200
 
 
+@patterns_bp.route("/<int:pattern_id>/publish", methods=["POST"])
+def publish_pattern(pattern_id):
+    """
+    Make a private pattern community-visible. One-way -- there's no
+    unpublish. Same permission rule as editing (_can_edit): the uploader
+    or an admin, never anyone a pattern was merely shared with.
+
+    No-ops if already public. Otherwise this is the one place a second
+    public copy of the same URL gets rejected (see Pattern.find_duplicate
+    -- the DB constraint alone only stops the *same* uploader from
+    double-submitting, not two different uploaders each publishing their
+    own private copy of the same source).
+    """
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    user = User.query.get(user_id)
+    pattern = Pattern.query.get_or_404(pattern_id)
+    if not _can_edit(user, pattern):
+        return jsonify({
+            "error": "You don't have permission to publish this pattern.",
+            "code": "edit_forbidden",
+        }), 403
+
+    if pattern.is_public:
+        return jsonify({
+            "message": "Already public.",
+            "pattern": pattern.to_dict(current_user_id=user_id),
+        }), 200
+
+    conflict = Pattern.query.filter(
+        Pattern.original_url == pattern.original_url,
+        Pattern.is_public.is_(True),
+        Pattern.id != pattern.id,
+    ).first()
+    if conflict:
+        return jsonify({
+            "error": "A pattern from this URL is already public.",
+            "code": "pattern_already_exists",
+            "existing_pattern_id": conflict.id,
+        }), 409
+
+    pattern.is_public = True
+    db.session.commit()
+
+    return jsonify({
+        "message": "Pattern published to the community.",
+        "pattern": pattern.to_dict(current_user_id=user_id),
+    }), 200
+
+
+@patterns_bp.route("/<int:pattern_id>/shares", methods=["GET"])
+def list_pattern_shares(pattern_id):
+    """Everyone this pattern has been individually shared with. Same
+    permission rule as editing -- only the uploader/an admin manages who
+    else can see a private pattern."""
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    user = User.query.get(user_id)
+    pattern = Pattern.query.get_or_404(pattern_id)
+    if not _can_edit(user, pattern):
+        return jsonify({
+            "error": "You don't have permission to manage this pattern's sharing.",
+            "code": "edit_forbidden",
+        }), 403
+
+    shares = PatternShare.query.filter_by(pattern_id=pattern_id).all()
+    return jsonify([s.to_dict() for s in shares]), 200
+
+
+@patterns_bp.route("/<int:pattern_id>/shares", methods=["POST"])
+def share_pattern(pattern_id):
+    """Grant one specific user (by exact username) view access to a
+    pattern that isn't public. Idempotent -- sharing with someone who
+    already has access just returns the current list."""
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    user = User.query.get(user_id)
+    pattern = Pattern.query.get_or_404(pattern_id)
+    if not _can_edit(user, pattern):
+        return jsonify({
+            "error": "You don't have permission to manage this pattern's sharing.",
+            "code": "edit_forbidden",
+        }), 403
+
+    username = (request.get_json(silent=True) or {}).get("username", "").strip()
+    if not username:
+        return jsonify({"error": "username is required", "code": "missing_fields"}), 400
+
+    target = User.query.filter_by(username=username).first()
+    if not target:
+        # Raw message, not a fixed key -- names the specific username that
+        # wasn't found, generated per-request like the scraper_error cases
+        # elsewhere in this file.
+        return jsonify({
+            "error": f"No user found with username '{username}'.",
+            "code": "share_user_not_found",
+        }), 404
+    if target.id == pattern.uploader_id:
+        return jsonify({
+            "error": "The uploader already has access to their own pattern.",
+            "code": "cannot_share_with_uploader",
+        }), 400
+
+    if not PatternShare.query.filter_by(pattern_id=pattern_id, user_id=target.id).first():
+        db.session.add(PatternShare(pattern_id=pattern_id, user_id=target.id))
+        db.session.commit()
+
+    shares = PatternShare.query.filter_by(pattern_id=pattern_id).all()
+    return jsonify([s.to_dict() for s in shares]), 201
+
+
+@patterns_bp.route("/<int:pattern_id>/shares/<int:share_user_id>", methods=["DELETE"])
+def unshare_pattern(pattern_id, share_user_id):
+    """Revoke a previously-granted share. A no-op (not an error) if that
+    user never had access -- same "removing something that's already
+    absent is fine" convention as unsave_pattern below."""
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    user = User.query.get(user_id)
+    pattern = Pattern.query.get_or_404(pattern_id)
+    if not _can_edit(user, pattern):
+        return jsonify({
+            "error": "You don't have permission to manage this pattern's sharing.",
+            "code": "edit_forbidden",
+        }), 403
+
+    PatternShare.query.filter_by(pattern_id=pattern_id, user_id=share_user_id).delete()
+    db.session.commit()
+
+    return jsonify({"message": "Access removed."}), 200
+
+
 @patterns_bp.route("/<int:pattern_id>/translate", methods=["POST"])
 def translate_pattern(pattern_id):
     """
@@ -331,16 +498,23 @@ def translate_pattern(pattern_id):
     uploader/admin edits the Hebrew fields directly via PATCH /<id>
     instead.
 
-    Any logged-in user can trigger this, not just the pattern's uploader
-    -- translating doesn't change the pattern's authoritative English
-    content, so it doesn't need the stricter _can_edit permission that
-    editing/photo routes use.
+    Any logged-in user who can *view* this pattern can trigger this, not
+    just its uploader -- translating doesn't change the pattern's
+    authoritative English content, so it doesn't need the stricter
+    _can_edit permission that editing/photo routes use. It does still
+    need _can_view, though: without it, anyone could probe a private
+    pattern's existence and burn a Gemini API call on content they can't
+    otherwise see.
     """
     user_id, error = _require_login()
     if error:
         return error
 
+    user = User.query.get(user_id)
     pattern = Pattern.query.get_or_404(pattern_id)
+    if not _can_view(user, pattern):
+        return jsonify({"error": "Pattern not found.", "code": "pattern_not_found"}), 404
+
     if pattern.title_he:
         return jsonify({
             "message": "This pattern already has a Hebrew translation.",
@@ -472,15 +646,22 @@ def delete_pattern_photo(pattern_id):
 @patterns_bp.route("/<int:pattern_id>/photo", methods=["GET"])
 def get_pattern_photo(pattern_id):
     """
-    Stream a manually-uploaded photo's raw bytes. No login required --
-    pattern detail (GET /<id>) is already public, so its photo is too.
-    Only ever the target of Pattern.to_dict()'s "photo_url" field when
-    photo_data is actually set (a scraped photo_url points straight at the
-    external source site instead, never through this route) -- so a 404
-    here means the frontend is acting on stale data, not something to
-    paper over by falling back to anything else.
+    Stream a manually-uploaded photo's raw bytes. No login required for a
+    *public* pattern -- same as its detail view (GET /<id>) -- but a
+    private one gates on _can_view same as everywhere else, so a photo
+    can't be fetched directly by URL to bypass the pattern's own
+    visibility. Only ever the target of Pattern.to_dict()'s "photo_url"
+    field when photo_data is actually set (a scraped photo_url points
+    straight at the external source site instead, never through this
+    route) -- so a 404 for a viewable pattern with no photo means the
+    frontend is acting on stale data, not something to paper over by
+    falling back to anything else.
     """
+    user_id = get_current_user_id()
     pattern = Pattern.query.get_or_404(pattern_id)
+    user = User.query.get(user_id) if user_id else None
+    if not _can_view(user, pattern):
+        return jsonify({"error": "Pattern not found.", "code": "pattern_not_found"}), 404
     if not pattern.photo_data:
         return jsonify({"error": "This pattern has no uploaded photo.", "code": "no_photo"}), 404
 
@@ -588,7 +769,7 @@ def my_saved_patterns():
     if request.method == "POST":
         pattern_id = (request.get_json(silent=True) or {}).get("pattern_id")
         pattern = Pattern.query.get(pattern_id)
-        if not pattern:
+        if not pattern or not _can_view(user, pattern):
             return jsonify({"error": "Pattern not found", "code": "pattern_not_found"}), 404
         if pattern not in user.saved_patterns:
             user.saved_patterns.append(pattern)
@@ -616,22 +797,53 @@ def unsave_pattern(pattern_id):
 
 @patterns_bp.route("/community", methods=["GET"])
 def community_patterns():
-    """All published patterns, newest first. Public -- unregistered visitors
-    can browse the community library, same as a single pattern's detail
-    view (get_pattern below); to_dict() already renders progress-free
-    output when there's no logged-in user to look progress up for."""
+    """Published (is_public) patterns only, newest first. Public --
+    unregistered visitors can browse the community library, same as a
+    single pattern's detail view (get_pattern below); to_dict() already
+    renders progress-free output when there's no logged-in user to look
+    progress up for. Private and shared-but-not-public patterns never
+    appear here regardless of viewer -- that's what /mine and
+    /shared-with-me are for."""
     user_id = get_current_user_id()
 
-    patterns = Pattern.query.order_by(Pattern.created_at.desc()).all()
+    patterns = (
+        Pattern.query.filter_by(is_public=True).order_by(Pattern.created_at.desc()).all()
+    )
+    return jsonify([p.to_dict(current_user_id=user_id) for p in patterns]), 200
+
+
+@patterns_bp.route("/shared-with-me", methods=["GET"])
+def shared_with_me():
+    """Patterns someone else explicitly shared with the current user (see
+    PatternShare) -- distinct from /mine (your own uploads) and /saved
+    (your bookmarks, which only ever contains patterns you could already
+    see)."""
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    pattern_ids = [
+        share.pattern_id for share in PatternShare.query.filter_by(user_id=user_id).all()
+    ]
+    patterns = (
+        Pattern.query.filter(Pattern.id.in_(pattern_ids))
+        .order_by(Pattern.created_at.desc())
+        .all()
+    )
     return jsonify([p.to_dict(current_user_id=user_id) for p in patterns]), 200
 
 
 @patterns_bp.route("/<int:pattern_id>", methods=["GET"])
 def get_pattern(pattern_id):
     """A single pattern's full detail, including this viewer's checklist
-    progress if they're logged in."""
+    progress if they're logged in. 404s (not 403) if this viewer can't
+    see it (see _can_view) -- a private pattern's existence isn't itself
+    revealed to someone without access."""
     user_id = get_current_user_id()
     pattern = Pattern.query.get_or_404(pattern_id)
+    user = User.query.get(user_id) if user_id else None
+    if not _can_view(user, pattern):
+        return jsonify({"error": "Pattern not found.", "code": "pattern_not_found"}), 404
     return jsonify(pattern.to_dict(current_user_id=user_id)), 200
 
 
@@ -660,7 +872,11 @@ def toggle_progress(pattern_id):
     if error:
         return error
 
+    user = User.query.get(user_id)
     pattern = Pattern.query.get_or_404(pattern_id)
+    if not _can_view(user, pattern):
+        return jsonify({"error": "Pattern not found.", "code": "pattern_not_found"}), 404
+
     data = request.get_json(silent=True) or {}
     part = data.get("part")
     index = data.get("index")

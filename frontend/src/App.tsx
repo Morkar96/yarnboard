@@ -12,6 +12,7 @@ import MyUploadsPage from "./pages/MyUploadsPage";
 import PatternDetailPage from "./pages/PatternDetailPage";
 import RegisterPage from "./pages/RegisterPage";
 import ReviewPatternPage from "./pages/ReviewPatternPage";
+import SharedWithMePage from "./pages/SharedWithMePage";
 import StitchFiddlePage from "./pages/StitchFiddlePage";
 import SubmitPatternPage from "./pages/SubmitPatternPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
@@ -66,6 +67,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <MySavedPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/shared-with-me"
+            element={
+              <ProtectedRoute>
+                <SharedWithMePage />
               </ProtectedRoute>
             }
           />

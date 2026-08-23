@@ -18,6 +18,7 @@ import type {
   PatternDraft,
   PatternEditPayload,
   PatternNotification,
+  PatternShare,
   PreviewResponse,
   StitchFiddleLink,
   User,
@@ -216,8 +217,45 @@ export function fetchCommunityPatterns() {
   return request<Pattern[]>("/api/patterns/community");
 }
 
+/** Patterns someone else explicitly shared with the current user -- see
+ * sharePattern below. Distinct from fetchMySaved (your own bookmarks). */
+export function fetchSharedWithMe() {
+  return request<Pattern[]>("/api/patterns/shared-with-me");
+}
+
 export function fetchPattern(patternId: number) {
   return request<Pattern>(`/api/patterns/${patternId}`);
+}
+
+/** Makes a private pattern community-visible. One-way -- there's no
+ * unpublish. 403s for anyone but the uploader/an admin (same permission
+ * rule as updatePattern); 409s if a different pattern is already public
+ * for this same original_url. */
+export function publishPattern(patternId: number) {
+  return request<{ message: string; pattern: Pattern }>(`/api/patterns/${patternId}/publish`, {
+    method: "POST",
+  });
+}
+
+/** Everyone a private pattern has been individually shared with (see
+ * PatternShare). 403s for anyone but the uploader/an admin. */
+export function fetchPatternShares(patternId: number) {
+  return request<PatternShare[]>(`/api/patterns/${patternId}/shares`);
+}
+
+/** Grants one user (by exact username) view access to a pattern that
+ * isn't public. Idempotent -- returns the current share list either way. */
+export function sharePattern(patternId: number, username: string) {
+  return request<PatternShare[]>(`/api/patterns/${patternId}/shares`, {
+    method: "POST",
+    body: JSON.stringify({ username }),
+  });
+}
+
+export function unsharePattern(patternId: number, userId: number) {
+  return request<{ message: string }>(`/api/patterns/${patternId}/shares/${userId}`, {
+    method: "DELETE",
+  });
 }
 
 /** Edit an already-published pattern. 403s if the current user is neither

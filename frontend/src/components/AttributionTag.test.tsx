@@ -19,6 +19,7 @@ const basePattern: Pattern = {
   translations: { he: null },
   uploader: "knitter123",
   uploader_id: 2,
+  is_public: true,
   created_at: null,
 };
 

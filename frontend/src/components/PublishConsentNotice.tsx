@@ -1,8 +1,11 @@
 /**
- * The explicit "this will be public" gate shown on the review page, between
- * the editable draft form and the Publish button. Required per the product
- * spec: uploaders must be clearly told their submission is published to the
- * whole community, not just saved privately.
+ * The explicit "this will be public" gate shown when publishing a pattern
+ * to the community (see PatternVisibilityPanel), between the "Publish"
+ * button and the actual POST /<id>/publish call. Required per the product
+ * spec: uploaders must be clearly told their pattern is about to become
+ * visible to everyone, not just saved privately -- which is what
+ * submitting/importing a pattern does on its own, before this gate is
+ * ever shown.
  */
 import { Alert, Form } from "react-bootstrap";
 import { useTranslation } from "react-i18next";

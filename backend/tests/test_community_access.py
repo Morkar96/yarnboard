@@ -31,14 +31,15 @@ def test_community_patterns_visible_without_login(client):
 
 def test_community_patterns_visible_once_logged_in(client):
     _register_and_login(client, "owner")
-    client.post(
+    pattern = client.post(
         "/api/patterns/submit",
         json={
             "original_url": "https://example.com/pattern",
             "title": "Test Pattern",
             "instructions": {"Part 1": ["Cast on 10."]},
         },
-    )
+    ).get_json()["pattern"]
+    client.post(f"/api/patterns/{pattern['id']}/publish")
 
     resp = client.get("/api/patterns/community")
     assert resp.status_code == 200
@@ -48,14 +49,15 @@ def test_community_patterns_visible_once_logged_in(client):
 
 def test_community_patterns_visible_to_anonymous_viewer_too(client):
     _register_and_login(client, "owner")
-    client.post(
+    pattern = client.post(
         "/api/patterns/submit",
         json={
             "original_url": "https://example.com/pattern",
             "title": "Test Pattern",
             "instructions": {"Part 1": ["Cast on 10."]},
         },
-    )
+    ).get_json()["pattern"]
+    client.post(f"/api/patterns/{pattern['id']}/publish")
     client.post("/api/logout")
 
     resp = client.get("/api/patterns/community")

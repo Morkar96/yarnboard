@@ -154,14 +154,15 @@ def test_importing_a_url_already_published_by_someone_else_links_instead_of_dupl
     monkeypatch.setattr(stitchfiddle, "fetch_chart", _fake_successful_chart)
     other_email = _register(client, "other")
     _login(client, other_email)
-    client.post(
+    submitted = client.post(
         "/api/patterns/submit",
         json={
             "original_url": REAL_SHARE_URL,
             "title": "Manually submitted already",
             "instructions": {},
         },
-    )
+    ).get_json()["pattern"]
+    client.post(f"/api/patterns/{submitted['id']}/publish")
     client.post("/api/logout")
 
     _login(client, _register(client, "owner"))

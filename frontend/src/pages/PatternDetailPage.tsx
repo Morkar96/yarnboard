@@ -17,6 +17,7 @@ import AttributionTag from "../components/AttributionTag";
 import CollapsibleCard from "../components/CollapsibleCard";
 import PatternChartGrid from "../components/PatternChartGrid";
 import PatternChecklist from "../components/PatternChecklist";
+import PatternVisibilityPanel from "../components/PatternVisibilityPanel";
 import { useAuth } from "../context/AuthContext";
 import { useApiErrorMessage } from "../i18n/useApiErrorMessage";
 import type { Pattern } from "../types/models";
@@ -74,6 +75,8 @@ export default function PatternDetailPage() {
         )}
       </div>
       <AttributionTag pattern={pattern} />
+
+      {canEdit && <PatternVisibilityPanel pattern={pattern} onPatternChange={setPattern} />}
 
       {pattern.chart_grid ? (
         <PatternChartGrid grid={pattern.chart_grid} />

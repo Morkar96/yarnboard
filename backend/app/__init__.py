@@ -199,6 +199,45 @@ def create_app():
             db.session.commit()
         print("Email verification columns added.")
 
+    @app.cli.command("add-pattern-visibility-columns")
+    def add_pattern_visibility_columns():
+        """`flask --app wsgi add-pattern-visibility-columns` -- one-off,
+        idempotent migration for the private-patterns/sharing feature:
+        adds Pattern.is_public, and swaps the old single-column unique
+        constraint on original_url (one canonical row per URL, globally,
+        always) for a composite one on (original_url, uploader_id) --
+        see Pattern.find_duplicate's docstring in models.py for why. The
+        new PatternShare table itself doesn't need a migration here:
+        db.create_all() (re-run `init-db`, safe, only creates missing
+        tables) already creates it on the live database.
+
+        is_public defaults to TRUE in this migration specifically (unlike
+        the model's Python-side default of False), same "grandfather
+        existing rows in, gate only what's new" split as
+        add-email-verification-columns above -- patterns that were already
+        community-visible before this feature existed shouldn't suddenly
+        disappear from it. Safe to re-run: the constraint swap is wrapped
+        so re-running it after it's already applied is a no-op rather than
+        an error. Not needed for a brand-new database -- init-db already
+        creates both the column and the composite constraint there."""
+        with app.app_context():
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS is_public '
+                "BOOLEAN NOT NULL DEFAULT TRUE"
+            ))
+            db.session.execute(db.text(
+                "ALTER TABLE pattern DROP CONSTRAINT IF EXISTS pattern_original_url_key"
+            ))
+            db.session.execute(db.text("""
+                DO $$ BEGIN
+                    ALTER TABLE pattern ADD CONSTRAINT uq_pattern_original_url_uploader
+                        UNIQUE (original_url, uploader_id);
+                EXCEPTION WHEN duplicate_object THEN NULL;
+                END $$;
+            """))
+            db.session.commit()
+        print("Pattern visibility columns added. Run `init-db` too if you haven't -- it creates the new pattern_share table.")
+
     @app.cli.command("make-admin")
     @click.argument("email")
     def make_admin(email):
