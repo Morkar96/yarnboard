@@ -42,6 +42,31 @@ def _issue_verify_token(user: User) -> None:
 
 @auth_bp.route("/register", methods=["POST"])
 def register():
+    """
+    Register a new account.
+    Creates the account unverified and emails a one-time verification
+    link; the account can't log in until that link is followed.
+    ---
+    tags: [Auth]
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [username, email, password]
+          properties:
+            username: {type: string}
+            email: {type: string}
+            password: {type: string}
+    responses:
+      201:
+        description: Account created; verification email sent
+      400:
+        description: Missing required fields
+      409:
+        description: A user with that email or username already exists
+    """
     data = request.get_json(silent=True) or {}
     username = (data.get("username") or "").strip()
     email = (data.get("email") or "").strip().lower()
@@ -83,6 +108,29 @@ def register():
 
 @auth_bp.route("/login", methods=["POST"])
 def login():
+    """
+    Log in with email + password.
+    Sets a signed session cookie on success.
+    ---
+    tags: [Auth]
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [email, password]
+          properties:
+            email: {type: string}
+            password: {type: string}
+    responses:
+      200:
+        description: Login successful, session cookie set
+      401:
+        description: Invalid email or password
+      403:
+        description: Email not verified yet
+    """
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
@@ -103,6 +151,25 @@ def login():
 
 @auth_bp.route("/verify-email", methods=["POST"])
 def verify_email():
+    """
+    Confirm an account using the one-time token from the verification email.
+    ---
+    tags: [Auth]
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [token]
+          properties:
+            token: {type: string}
+    responses:
+      200:
+        description: Email verified, account can now log in
+      400:
+        description: Missing, invalid/used, or expired token
+    """
     data = request.get_json(silent=True) or {}
     token = (data.get("token") or "").strip()
     if not token:
@@ -135,6 +202,25 @@ def verify_email():
 
 @auth_bp.route("/resend-verification", methods=["POST"])
 def resend_verification():
+    """
+    Send a fresh verification link to an unverified account.
+    Always returns the same message whether or not the account exists or
+    is already verified, so this can't be used to enumerate emails.
+    ---
+    tags: [Auth]
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [email]
+          properties:
+            email: {type: string}
+    responses:
+      200:
+        description: A generic confirmation message (see docstring)
+    """
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
 
@@ -157,12 +243,37 @@ def resend_verification():
 
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
+    """
+    Log out the current session.
+    ---
+    tags: [Auth]
+    responses:
+      200:
+        description: Logout successful
+    """
     session.pop("user_id", None)
     return jsonify({"message": "Logout successful"}), 200
 
 
 @auth_bp.route("/profile", methods=["GET"])
 def profile():
+    """
+    Get the logged-in user's own profile.
+    ---
+    tags: [Auth]
+    responses:
+      200:
+        description: The current user
+        schema:
+          type: object
+          properties:
+            id: {type: integer}
+            username: {type: string}
+            email: {type: string}
+            is_admin: {type: boolean}
+      401:
+        description: Not logged in
+    """
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"error": "Unauthorized", "code": "unauthorized"}), 401

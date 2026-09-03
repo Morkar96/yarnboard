@@ -34,7 +34,15 @@ def _require_login():
 @stitch_fiddle_bp.route("/links", methods=["GET"])
 def list_links():
     """This user's own saved Stitch Fiddle links -- never anyone else's,
-    there's no community-wide variant of this list."""
+    there's no community-wide variant of this list.
+    ---
+    tags: [StitchFiddle]
+    responses:
+      200:
+        description: This user's saved links
+      401:
+        description: Not logged in
+    """
     user_id, error = _require_login()
     if error:
         return error
@@ -58,6 +66,26 @@ def save_link():
     If this user already saved this chart_id, returns the existing row
     rather than erroring -- pasting the same link twice is a no-op, not a
     mistake worth surfacing as an error.
+    ---
+    tags: [StitchFiddle]
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [share_url]
+          properties:
+            share_url: {type: string}
+    responses:
+      200:
+        description: This user already saved this chart_id -- existing row returned
+      201:
+        description: Link saved
+      400:
+        description: Not a valid Stitch Fiddle share URL
+      401:
+        description: Not logged in
     """
     user_id, error = _require_login()
     if error:
@@ -85,6 +113,25 @@ def save_link():
 
 @stitch_fiddle_bp.route("/links/<int:link_id>", methods=["DELETE"])
 def delete_link(link_id):
+    """
+    Remove one of this user's saved Stitch Fiddle links.
+    ---
+    tags: [StitchFiddle]
+    parameters:
+      - in: path
+        name: link_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Link removed
+      401:
+        description: Not logged in
+      403:
+        description: Not this user's link
+      404:
+        description: No such link
+    """
     user_id, error = _require_login()
     if error:
         return error
@@ -115,6 +162,26 @@ def import_link(link_id):
     grid) is exact structured data, not a heuristic guess, so there's
     nothing for a human to correct first -- the user can still edit the
     resulting pattern normally afterward.
+    ---
+    tags: [StitchFiddle]
+    parameters:
+      - in: path
+        name: link_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Already imported (or a duplicate of an existing Pattern) -- that Pattern returned
+      201:
+        description: Chart imported into a new private Pattern
+      401:
+        description: Not logged in
+      403:
+        description: Not this user's link
+      404:
+        description: No such link
+      502:
+        description: Stitch Fiddle fetch failed (timeout, chart no longer public, etc.)
     """
     user_id, error = _require_login()
     if error:
