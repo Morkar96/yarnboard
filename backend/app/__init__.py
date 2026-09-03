@@ -49,6 +49,13 @@ def create_app(config_overrides: dict | None = None):
     app.config.from_object(get_config())
     if config_overrides:
         app.config.update(config_overrides)
+    # Flask's JSON provider alphabetizes dict keys by default, recursively
+    # -- Pattern.instructions is an ordered {part_name: [steps]} dict whose
+    # key order is meaningful (see PatternReviewForm.tsx's movePart, which
+    # lets an uploader deliberately reorder parts), so a plain jsonify()
+    # would silently re-sort it back to alphabetical on every response,
+    # discarding that order.
+    app.json.sort_keys = False
     # Initialize Swagger with default configurations
     swagger = Swagger(app)
 

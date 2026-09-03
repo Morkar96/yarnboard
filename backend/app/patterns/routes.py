@@ -326,6 +326,14 @@ def edit_pattern(pattern_id):
     pattern.materials = data.get("materials")
     pattern.abbreviations = data.get("abbreviations")
     pattern.instructions = new_instructions
+    # SQLAlchemy checks Python equality before deciding a column actually
+    # changed, and dict equality ignores key order -- reordering parts
+    # without touching their content would otherwise be silently dropped
+    # from the UPDATE (the in-memory object looks right, but the DB row
+    # never gets the new order). flag_modified forces it through
+    # regardless of whether the content is equal, same as toggle_progress
+    # below does for completed_steps.
+    flag_modified(pattern, "instructions")
     if instructions_changed:
         pattern.instructions_version += 1
 
