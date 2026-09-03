@@ -97,3 +97,38 @@ def send_pattern_updated_email(to_email: str, pattern) -> None:
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
+
+
+def send_pattern_shared_email(to_email: str, sharer_username: str, pattern) -> None:
+    """
+    Notify `to_email` that `sharer_username` gave them access to `pattern`.
+    Raises requests.RequestException on delivery failure -- the caller
+    (patterns/routes.py's share_pattern) treats that the same way every
+    other best-effort notification email here does: log and move on,
+    since the share itself already succeeded regardless of the email.
+    """
+    api_key = os.environ.get("RESEND_API_KEY")
+    from_email = os.environ.get("RESEND_FROM_EMAIL", "Yarnboard <notifications@yarnboard.app>")
+    app_url = os.environ.get("PUBLIC_APP_URL", "http://localhost:5173")
+    pattern_url = f"{app_url}/pattern/{pattern.id}"
+
+    subject = f'{sharer_username} shared "{pattern.title}" with you'
+    html = (
+        f"<p><strong>{sharer_username}</strong> shared a pattern with you on "
+        f"Yarnboard: <strong>{pattern.title}</strong>.</p>"
+        f'<p><a href="{pattern_url}">View the pattern</a></p>'
+    )
+
+    if not api_key:
+        current_app.logger.warning(
+            "RESEND_API_KEY not set -- would send email to %s: %s", to_email, subject
+        )
+        return
+
+    response = requests.post(
+        RESEND_API_URL,
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={"from": from_email, "to": [to_email], "subject": subject, "html": html},
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()

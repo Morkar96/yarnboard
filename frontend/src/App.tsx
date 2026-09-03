@@ -9,6 +9,7 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import MySavedPage from "./pages/MySavedPage";
 import MyUploadsPage from "./pages/MyUploadsPage";
+import NotificationSettingsPage from "./pages/NotificationSettingsPage";
 import PatternDetailPage from "./pages/PatternDetailPage";
 import RegisterPage from "./pages/RegisterPage";
 import ReviewPatternPage from "./pages/ReviewPatternPage";
@@ -83,6 +84,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <StitchFiddlePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings/notifications"
+            element={
+              <ProtectedRoute>
+                <NotificationSettingsPage />
               </ProtectedRoute>
             }
           />

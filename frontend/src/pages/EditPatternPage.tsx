@@ -28,9 +28,9 @@ import {
   uploadPatternPhoto,
 } from "../api/client";
 import PatternReviewForm from "../components/PatternReviewForm";
-import { useAuth } from "../context/AuthContext";
 import { useApiErrorMessage } from "../i18n/useApiErrorMessage";
 import type { HebrewInstructionEntry, Pattern, PatternDraft, PatternEditPayload } from "../types/models";
+import { useUnsavedChangesWarning } from "../utils/useUnsavedChangesWarning";
 
 /** Pattern.instructions is {part: [{step, completed}]} (viewer-specific
  * progress merged in); PatternReviewForm expects the plain-string draft
@@ -72,7 +72,6 @@ function patternToHeDraft(pattern: Pattern): HeDraft | null {
 
 export default function EditPatternPage() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const getErrorMessage = useApiErrorMessage();
@@ -87,24 +86,35 @@ export default function EditPatternPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
+  // Snapshot of {draft, heDraft} as first loaded, to diff the live state
+  // against for the unsaved-changes warning below -- not photo uploads/
+  // removals, which save immediately on their own rather than going
+  // through handleSave, so they're never "unsaved" in that sense.
+  const [initialSnapshot, setInitialSnapshot] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
     fetchPattern(Number(id))
       .then((p) => {
         setPattern(p);
-        setDraft(patternToDraft(p));
-        setHeDraft(patternToHeDraft(p));
+        const draft = patternToDraft(p);
+        const heDraft = patternToHeDraft(p);
+        setDraft(draft);
+        setHeDraft(heDraft);
+        setInitialSnapshot(JSON.stringify({ draft, heDraft }));
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [id]);
 
+  useUnsavedChangesWarning(
+    initialSnapshot !== null && JSON.stringify({ draft, heDraft }) !== initialSnapshot,
+  );
+
   if (loading) return <Spinner animation="border" variant="primary" />;
   if (notFound || !pattern || !draft) return <p className="text-muted">{t("editPattern.notFound")}</p>;
 
-  const canEdit = !!user && (user.is_admin || user.id === pattern.uploader_id);
-  if (!canEdit) {
+  if (!pattern.can_edit) {
     return <Alert variant="danger">{t("editPattern.permissionDenied")}</Alert>;
   }
 

@@ -263,6 +263,27 @@ def create_app(config_overrides: dict | None = None):
             db.session.commit()
         print("Pattern visibility columns added. Run `init-db` too if you haven't -- it creates the new pattern_share table.")
 
+    @app.cli.command("add-sharing-and-notification-columns")
+    def add_sharing_and_notification_columns():
+        """`flask --app wsgi add-sharing-and-notification-columns` --
+        one-off, idempotent migration for edit-level pattern sharing and
+        per-user notification settings: adds PatternShare.can_edit and
+        User.notification_settings. The new notification table itself
+        doesn't need a migration here -- db.create_all() (re-run
+        `init-db`, safe) already creates it on the live database. Safe to
+        re-run (IF NOT EXISTS). Not needed for a brand-new database --
+        init-db already creates both columns there."""
+        with app.app_context():
+            db.session.execute(db.text(
+                "ALTER TABLE pattern_share ADD COLUMN IF NOT EXISTS can_edit "
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS notification_settings JSON'
+            ))
+            db.session.commit()
+        print("Sharing/notification columns added. Run `init-db` too if you haven't -- it creates the new notification table.")
+
     @app.cli.command("make-admin")
     @click.argument("email")
     def make_admin(email):
