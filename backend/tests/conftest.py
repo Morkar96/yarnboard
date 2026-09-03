@@ -9,12 +9,18 @@ easily end up on two different connections to two different (both empty)
 in-memory databases. A temp file sidesteps that entirely at negligible
 cost (fast local disk, auto-cleaned after each test).
 
-SQLALCHEMY_DATABASE_URI is overridden on `app.config` *after* create_app()
-runs, not via the DATABASE_URL environment variable -- app/config.py reads
+SQLALCHEMY_DATABASE_URI is passed into create_app()'s config_overrides,
+not set via the DATABASE_URL environment variable -- app/config.py reads
 that env var once, as a class attribute, at import time, so setting it
-per-test would only affect whichever test happens to run first. Flask-
-SQLAlchemy resolves the engine lazily from `app.config`, so overriding it
-here still takes effect for this app instance.
+per-test would only affect whichever test happens to run first. It also
+can't be applied via `app.config.update(...)` *after* create_app()
+returns: Flask-SQLAlchemy 3.x builds the engine eagerly inside
+`db.init_app(app)` (called from within create_app()), reading
+SQLALCHEMY_DATABASE_URI at that exact moment -- a later `.config.update()`
+doesn't change which engine `db.create_all()`/`drop_all()` actually use.
+Getting this wrong here previously meant every test run was silently
+dropping all tables in the real local `backend/instance/yarnboard.db`
+instead of an isolated temp file.
 """
 
 import os
@@ -30,11 +36,10 @@ from app.extensions import db as _db
 def app():
     db_fd, db_path = tempfile.mkstemp(suffix=".db")
 
-    flask_app = create_app()
-    flask_app.config.update(
-        TESTING=True,
-        SQLALCHEMY_DATABASE_URI=f"sqlite:///{db_path}",
-    )
+    flask_app = create_app(config_overrides={
+        "TESTING": True,
+        "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path}",
+    })
 
     with flask_app.app_context():
         _db.create_all()

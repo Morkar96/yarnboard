@@ -71,7 +71,7 @@ export default function NavBar() {
                 <Nav.Link as={Link} to="/login">
                   {t("nav.login")}
                 </Nav.Link>
-                <Link to="/register" className="btn btn-light btn-sm">
+                <Link to="/register" className="btn btn-outline-light">
                   {t("nav.signup")}
                 </Link>
               </>

@@ -120,6 +120,26 @@ def _existing_pattern_response(url: str, uploader_id: int):
 def preview_pattern():
     """
     Scrape `url` and return a draft for the user to review -- no DB write.
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [url]
+          properties:
+            url: {type: string}
+    responses:
+      200:
+        description: Either {duplicate:true, existing_pattern_id} or {duplicate:false, draft}
+      400:
+        description: url is required
+      401:
+        description: Not logged in
+      502:
+        description: The page couldn't be fetched/parsed (bot-detection, timeout, etc.)
     """
     user_id, error = _require_login()
     if error:
@@ -169,6 +189,29 @@ def preview_pattern_from_upload():
 
     multipart/form-data body: `url` (text field), `html_file` (file field,
     despite the name also accepts a PDF).
+    ---
+    tags: [Patterns]
+    consumes:
+      - multipart/form-data
+    parameters:
+      - in: formData
+        name: url
+        type: string
+        required: true
+      - in: formData
+        name: html_file
+        type: file
+        required: true
+        description: A saved HTML page or a PDF (sniffed by content, not filename)
+    responses:
+      200:
+        description: Either {duplicate:true, existing_pattern_id} or {duplicate:false, draft}
+      400:
+        description: url or html_file missing
+      401:
+        description: Not logged in
+      502:
+        description: The file couldn't be parsed
     """
     user_id, error = _require_login()
     if error:
@@ -212,6 +255,32 @@ def submit_pattern():
 
     Expects the (possibly hand-edited) fields the /preview draft contained,
     plus original_url. This is the only place a Pattern row gets created.
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [original_url, title]
+          properties:
+            original_url: {type: string}
+            title: {type: string}
+            author: {type: string}
+            materials: {type: string}
+            abbreviations: {type: string}
+            instructions: {type: object}
+            photo_url: {type: string}
+    responses:
+      201:
+        description: Pattern saved (private)
+      400:
+        description: original_url or title missing
+      401:
+        description: Not logged in
+      409:
+        description: A pattern from this URL already exists for this uploader (or is already public)
     """
     user_id, error = _require_login()
     if error:
@@ -291,6 +360,40 @@ def edit_pattern(pattern_id):
     instructions_version or notify anyone -- that mechanism is about the
     canonical English structure changing shape, not a translation
     correction.
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [title]
+          properties:
+            title: {type: string}
+            author: {type: string}
+            materials: {type: string}
+            abbreviations: {type: string}
+            instructions: {type: object}
+            title_he: {type: string}
+            materials_he: {type: string}
+            abbreviations_he: {type: string}
+            instructions_he: {type: object}
+    responses:
+      200:
+        description: Pattern updated
+      400:
+        description: title missing, or instructions_he doesn't match instructions' structure
+      401:
+        description: Not logged in
+      403:
+        description: Not the uploader or an admin
+      404:
+        description: No such pattern
     """
     user_id, error = _require_login()
     if error:
@@ -359,6 +462,24 @@ def publish_pattern(pattern_id):
     -- the DB constraint alone only stops the *same* uploader from
     double-submitting, not two different uploaders each publishing their
     own private copy of the same source).
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Pattern is now public (or already was)
+      401:
+        description: Not logged in
+      403:
+        description: Not the uploader or an admin
+      404:
+        description: No such pattern
+      409:
+        description: A different pattern from this URL is already public
     """
     user_id, error = _require_login()
     if error:
@@ -403,7 +524,24 @@ def publish_pattern(pattern_id):
 def list_pattern_shares(pattern_id):
     """Everyone this pattern has been individually shared with. Same
     permission rule as editing -- only the uploader/an admin manages who
-    else can see a private pattern."""
+    else can see a private pattern.
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: List of shares (id, user_id, username, created_at)
+      401:
+        description: Not logged in
+      403:
+        description: Not the uploader or an admin
+      404:
+        description: No such pattern
+    """
     user_id, error = _require_login()
     if error:
         return error
@@ -424,7 +562,34 @@ def list_pattern_shares(pattern_id):
 def share_pattern(pattern_id):
     """Grant one specific user (by exact username) view access to a
     pattern that isn't public. Idempotent -- sharing with someone who
-    already has access just returns the current list."""
+    already has access just returns the current list.
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [username]
+          properties:
+            username: {type: string}
+    responses:
+      201:
+        description: Updated list of shares
+      400:
+        description: username missing, or is the pattern's own uploader
+      401:
+        description: Not logged in
+      403:
+        description: Not the uploader or an admin
+      404:
+        description: No such pattern, or no user with that username
+    """
     user_id, error = _require_login()
     if error:
         return error
@@ -468,7 +633,28 @@ def share_pattern(pattern_id):
 def unshare_pattern(pattern_id, share_user_id):
     """Revoke a previously-granted share. A no-op (not an error) if that
     user never had access -- same "removing something that's already
-    absent is fine" convention as unsave_pattern below."""
+    absent is fine" convention as unsave_pattern below.
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+      - in: path
+        name: share_user_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Access removed (or was already absent)
+      401:
+        description: Not logged in
+      403:
+        description: Not the uploader or an admin
+      404:
+        description: No such pattern
+    """
     user_id, error = _require_login()
     if error:
         return error
@@ -505,6 +691,22 @@ def translate_pattern(pattern_id):
     need _can_view, though: without it, anyone could probe a private
     pattern's existence and burn a Gemini API call on content they can't
     otherwise see.
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Translated (or already had a translation) -- pattern returned either way
+      401:
+        description: Not logged in
+      404:
+        description: No such pattern, or not visible to this user
+      502:
+        description: Translation call failed
     """
     user_id, error = _require_login()
     if error:
@@ -563,6 +765,30 @@ def upload_pattern_photo(pattern_id):
     A successful upload always replaces any scraped photo_url this pattern
     had (photo_data takes priority in Pattern.to_dict) -- manual upload is
     meant to override, not layer behind, whatever scraping found.
+    ---
+    tags: [Patterns]
+    consumes:
+      - multipart/form-data
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+      - in: formData
+        name: photo
+        type: file
+        required: true
+    responses:
+      200:
+        description: Photo updated
+      400:
+        description: photo missing, too large, or not a valid image
+      401:
+        description: Not logged in
+      403:
+        description: Not the uploader or an admin
+      404:
+        description: No such pattern
     """
     user_id, error = _require_login()
     if error:
@@ -618,6 +844,22 @@ def delete_pattern_photo(pattern_id):
     "falling back" to a previously-scraped photo_url after an uploaded one
     is removed -- that would be surprising; "remove the photo" should mean
     no photo, full stop. Same permission rule as upload/edit (_can_edit).
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Photo removed
+      401:
+        description: Not logged in
+      403:
+        description: Not the uploader or an admin
+      404:
+        description: No such pattern
     """
     user_id, error = _require_login()
     if error:
@@ -656,6 +898,20 @@ def get_pattern_photo(pattern_id):
     route) -- so a 404 for a viewable pattern with no photo means the
     frontend is acting on stale data, not something to paper over by
     falling back to anything else.
+    ---
+    tags: [Patterns]
+    produces:
+      - image/jpeg
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Raw image bytes
+      404:
+        description: No such pattern, not visible to this user, or it has no photo
     """
     user_id = get_current_user_id()
     pattern = Pattern.query.get_or_404(pattern_id)
@@ -697,6 +953,13 @@ def pattern_notifications():
     Patterns the current user has meaningful, now-stale progress on --
     drives the in-app "this pattern changed" banner. Read-only: unlike
     /acknowledge-update, viewing this list doesn't clear anything.
+    ---
+    tags: [Patterns]
+    responses:
+      200:
+        description: List of {id, title} for stale patterns
+      401:
+        description: Not logged in
     """
     user_id, error = _require_login()
     if error:
@@ -729,6 +992,20 @@ def acknowledge_pattern_update(pattern_id):
     stale anymore (e.g. a duplicate call from a second browser tab that
     already lazily reset via toggle_progress), this is a no-op rather than
     wiping progress the user may have already re-entered.
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Acknowledged (no-op if not actually stale)
+      401:
+        description: Not logged in
+      404:
+        description: No such pattern
     """
     user_id, error = _require_login()
     if error:
@@ -749,7 +1026,15 @@ def acknowledge_pattern_update(pattern_id):
 
 @patterns_bp.route("/mine", methods=["GET"])
 def my_uploaded_patterns():
-    """Patterns this user personally uploaded."""
+    """Patterns this user personally uploaded.
+    ---
+    tags: [Patterns]
+    responses:
+      200:
+        description: This user's uploaded patterns (public and private)
+      401:
+        description: Not logged in
+    """
     user_id, error = _require_login()
     if error:
         return error
@@ -760,7 +1045,26 @@ def my_uploaded_patterns():
 
 @patterns_bp.route("/saved", methods=["GET", "POST"])
 def my_saved_patterns():
-    """List this user's bookmarked community patterns, or bookmark a new one."""
+    """List this user's bookmarked community patterns, or bookmark a new one.
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: body
+        name: body
+        required: false
+        description: Only used for POST
+        schema:
+          type: object
+          properties:
+            pattern_id: {type: integer}
+    responses:
+      200:
+        description: GET -- this user's saved patterns; POST -- confirmation message
+      401:
+        description: Not logged in
+      404:
+        description: (POST) No such pattern, or not visible to this user
+    """
     user_id, error = _require_login()
     if error:
         return error
@@ -781,7 +1085,20 @@ def my_saved_patterns():
 
 @patterns_bp.route("/saved/<int:pattern_id>", methods=["DELETE"])
 def unsave_pattern(pattern_id):
-    """Remove a pattern from this user's saved/bookmarked list."""
+    """Remove a pattern from this user's saved/bookmarked list.
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Removed (no-op if it wasn't saved)
+      401:
+        description: Not logged in
+    """
     user_id, error = _require_login()
     if error:
         return error
@@ -803,7 +1120,13 @@ def community_patterns():
     renders progress-free output when there's no logged-in user to look
     progress up for. Private and shared-but-not-public patterns never
     appear here regardless of viewer -- that's what /mine and
-    /shared-with-me are for."""
+    /shared-with-me are for.
+    ---
+    tags: [Patterns]
+    responses:
+      200:
+        description: All public patterns, newest first
+    """
     user_id = get_current_user_id()
 
     patterns = (
@@ -817,7 +1140,15 @@ def shared_with_me():
     """Patterns someone else explicitly shared with the current user (see
     PatternShare) -- distinct from /mine (your own uploads) and /saved
     (your bookmarks, which only ever contains patterns you could already
-    see)."""
+    see).
+    ---
+    tags: [Patterns]
+    responses:
+      200:
+        description: Patterns explicitly shared with this user
+      401:
+        description: Not logged in
+    """
     user_id, error = _require_login()
     if error:
         return error
@@ -838,7 +1169,20 @@ def get_pattern(pattern_id):
     """A single pattern's full detail, including this viewer's checklist
     progress if they're logged in. 404s (not 403) if this viewer can't
     see it (see _can_view) -- a private pattern's existence isn't itself
-    revealed to someone without access."""
+    revealed to someone without access.
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Full pattern detail
+      404:
+        description: No such pattern, or not visible to this viewer
+    """
     user_id = get_current_user_id()
     pattern = Pattern.query.get_or_404(pattern_id)
     user = User.query.get(user_id) if user_id else None
@@ -867,6 +1211,32 @@ def toggle_progress(pattern_id):
     toggle is applied -- this is the lazy per-user reset described in
     UserPatternProgress's docstring, triggered by real interaction rather
     than a bulk operation at edit time.
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required: [part, index, completed]
+          properties:
+            part: {type: string}
+            index: {type: integer}
+            completed: {type: boolean}
+    responses:
+      200:
+        description: Progress updated
+      400:
+        description: That checklist step doesn't exist
+      401:
+        description: Not logged in
+      404:
+        description: No such pattern, or not visible to this user
     """
     user_id, error = _require_login()
     if error:

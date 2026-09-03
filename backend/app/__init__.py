@@ -15,6 +15,7 @@ top-to-bottom for one concern, without wading through the other.
 """
 
 from pathlib import Path
+from flasgger import Swagger
 
 import click
 from flask import Flask, jsonify, send_from_directory
@@ -30,9 +31,26 @@ from .extensions import db, bcrypt
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
 
-def create_app():
+def create_app(config_overrides: dict | None = None):
+    """
+    `config_overrides`, if given, is applied to `app.config` before
+    `db.init_app(app)` runs -- required for tests/conftest.py to point at
+    an isolated database. Flask-SQLAlchemy 3.x builds the engine eagerly
+    inside `init_app()`, reading `SQLALCHEMY_DATABASE_URI` at that exact
+    moment; updating `app.config` afterward (the old approach here) is a
+    no-op against the engine that's already cached, since it's not
+    re-read lazily on each query the way it was in Flask-SQLAlchemy 2.x.
+    Concretely, that bug meant every pytest run's `db.create_all()`/
+    `drop_all()` was silently operating on the real local
+    `backend/instance/yarnboard.db` instead of a test's temp file --
+    creating tables, then dropping them all at teardown.
+    """
     app = Flask(__name__)
     app.config.from_object(get_config())
+    if config_overrides:
+        app.config.update(config_overrides)
+    # Initialize Swagger with default configurations
+    swagger = Swagger(app)
 
     db.init_app(app)
     bcrypt.init_app(app)
