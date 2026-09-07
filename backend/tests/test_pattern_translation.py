@@ -337,3 +337,65 @@ def test_glossary_file_must_be_a_flat_string_to_string_object(monkeypatch, tmp_p
 
     with pytest.raises(translation.TranslationError):
         translation._load_glossary()
+
+
+def _fake_response_error(status_code):
+    """A requests.RequestException carrying a fake `.response.status_code`
+    -- same shape as what raise_for_status() actually raises, without a
+    real HTTP round trip."""
+    return translation.requests.exceptions.RequestException(
+        f"{status_code} error", response=type("R", (), {"status_code": status_code})()
+    )
+
+
+def test_translation_retries_on_transient_server_error_then_succeeds(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(translation, "RETRY_BACKOFF_SECONDS", 0)  # don't actually sleep in tests
+    calls = {"count": 0}
+
+    def fake_post(url, params, json, timeout):
+        calls["count"] += 1
+        if calls["count"] < 3:
+            raise _fake_response_error(503)
+        return _FakeGeminiResponse(_gemini_payload(INSTRUCTIONS))
+
+    monkeypatch.setattr(translation.requests, "post", fake_post)
+
+    title_he, *_ = translation.translate_pattern_to_hebrew("Title", "Materials", "k: knit", INSTRUCTIONS)
+
+    assert title_he == "HE:title"
+    assert calls["count"] == 3  # failed twice, succeeded on the 3rd attempt
+
+
+def test_translation_gives_up_after_max_retries(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(translation, "RETRY_BACKOFF_SECONDS", 0)
+    calls = {"count": 0}
+
+    def fake_post(url, params, json, timeout):
+        calls["count"] += 1
+        raise _fake_response_error(503)
+
+    monkeypatch.setattr(translation.requests, "post", fake_post)
+
+    with pytest.raises(translation.TranslationError):
+        translation.translate_pattern_to_hebrew("Title", "Materials", "k: knit", INSTRUCTIONS)
+
+    assert calls["count"] == translation.MAX_RETRIES + 1
+
+
+def test_translation_does_not_retry_a_client_error(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(translation, "RETRY_BACKOFF_SECONDS", 0)
+    calls = {"count": 0}
+
+    def fake_post(url, params, json, timeout):
+        calls["count"] += 1
+        raise _fake_response_error(400)
+
+    monkeypatch.setattr(translation.requests, "post", fake_post)
+
+    with pytest.raises(translation.TranslationError):
+        translation.translate_pattern_to_hebrew("Title", "Materials", "k: knit", INSTRUCTIONS)
+
+    assert calls["count"] == 1  # no retries for a 4xx
