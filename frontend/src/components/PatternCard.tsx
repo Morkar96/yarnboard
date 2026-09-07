@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { resolvePhotoUrl } from "../api/client";
 import type { Pattern } from "../types/models";
+import { translationForUiLanguage } from "../utils/patternTranslation";
 import AttributionTag from "./AttributionTag";
 
 interface Props {
@@ -20,9 +21,9 @@ interface Props {
 
 export default function PatternCard({ pattern, onToggleSave, isSaved }: Props) {
   const { t, i18n } = useTranslation();
-  // Falls back to the English title for patterns that haven't been
-  // translated yet -- see Pattern.translations in types/models.ts.
-  const title = (i18n.language === "he" && pattern.translations.he?.title) || pattern.title;
+  // Falls back to the pattern's own primary-content title for whichever
+  // direction has no translation yet -- see translationForUiLanguage.
+  const title = translationForUiLanguage(pattern, i18n.language)?.title ?? pattern.title;
 
   return (
     <Card className="h-100 shadow-sm">

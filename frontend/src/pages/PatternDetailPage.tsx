@@ -31,6 +31,7 @@ import PatternVisibilityPanel from "../components/PatternVisibilityPanel";
 import { useAuth } from "../context/AuthContext";
 import { useApiErrorMessage } from "../i18n/useApiErrorMessage";
 import type { Pattern } from "../types/models";
+import { translationForUiLanguage } from "../utils/patternTranslation";
 
 /** Hebrew Unicode block -- used as a lightweight, purely-client-side
  * heuristic to guess whether a pattern's own primary content is Hebrew
@@ -70,11 +71,10 @@ export default function PatternDetailPage() {
 
   // Whichever translation matches the current UI language, falling back
   // to the pattern's own primary content -- see the module docstring above.
-  const translationForUiLanguage =
-    i18n.language === "he" ? pattern.translations.he : i18n.language === "en" ? pattern.translations.en : null;
-  const title = translationForUiLanguage?.title ?? pattern.title;
-  const materials = translationForUiLanguage?.materials ?? pattern.materials;
-  const abbreviations = translationForUiLanguage?.abbreviations ?? pattern.abbreviations;
+  const activeTranslation = translationForUiLanguage(pattern, i18n.language);
+  const title = activeTranslation?.title ?? pattern.title;
+  const materials = activeTranslation?.materials ?? pattern.materials;
+  const abbreviations = activeTranslation?.abbreviations ?? pattern.abbreviations;
   const he = pattern.translations.he;
   const en = pattern.translations.en;
   // Only offer translating *away* from whatever the pattern's own
@@ -164,7 +164,7 @@ export default function PatternDetailPage() {
           )}
         </div>
       )}
-      {translationForUiLanguage && !translationForUiLanguage.reviewed && (
+      {activeTranslation && !activeTranslation.reviewed && (
         <Alert variant="warning" className="py-2">
           {t("patternDetail.unreviewedNotice")}
         </Alert>
