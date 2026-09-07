@@ -86,32 +86,35 @@ def _can_view(user: User | None, pattern: Pattern) -> bool:
     return PatternShare.query.filter_by(pattern_id=pattern.id, user_id=user.id).first() is not None
 
 
-def _validate_instructions_he(instructions: dict, instructions_he) -> str | None:
+def _validate_translated_instructions(instructions: dict, translated: dict, lang: str) -> str | None:
     """
-    Returns an error message if `instructions_he` doesn't structurally
+    Returns an error message if `translated` (instructions_he or
+    instructions_en, per `lang` -- "he" or "en") doesn't structurally
     mirror `instructions` -- same part-name keys (never translated keys
-    of its own), and each part's steps_he the same length as its English
-    steps. Returns None if valid.
+    of its own), and each part's steps_<lang> the same length as its
+    primary-content steps. Returns None if valid.
 
-    This invariant is what lets checklist progress (keyed by the English
-    part name -- see UserPatternProgress's docstring and toggle_progress
-    below) stay correct regardless of which language is displayed; see
-    Pattern.instructions_he's docstring in models.py for the full
-    rationale. A mismatch here is a translation bug, not a legitimate
-    structural edit -- reject it rather than silently accepting content
-    that would desync from the checklist.
+    This invariant is what lets checklist progress (keyed by the
+    pattern's own primary part name -- see UserPatternProgress's
+    docstring and toggle_progress below) stay correct regardless of which
+    language is displayed; see Pattern.instructions_he/instructions_en's
+    docstrings in models.py for the full rationale. A mismatch here is a
+    translation bug, not a legitimate structural edit -- reject it rather
+    than silently accepting content that would desync from the checklist.
     """
-    if not isinstance(instructions_he, dict):
-        return "instructions_he must be an object keyed by part name."
-    if set(instructions_he.keys()) != set(instructions.keys()):
-        return "instructions_he must have exactly the same part names as instructions."
+    field = f"instructions_{lang}"
+    steps_key = f"steps_{lang}"
+    if not isinstance(translated, dict):
+        return f"{field} must be an object keyed by part name."
+    if set(translated.keys()) != set(instructions.keys()):
+        return f"{field} must have exactly the same part names as instructions."
     for part, steps in instructions.items():
-        entry = instructions_he[part]
+        entry = translated[part]
         if not isinstance(entry, dict):
-            return f"instructions_he['{part}'] must be an object with heading_he/steps_he."
-        steps_he = entry.get("steps_he")
-        if not isinstance(steps_he, list) or len(steps_he) != len(steps):
-            return f"instructions_he['{part}']['steps_he'] must have {len(steps)} entries."
+            return f"{field}['{part}'] must be an object with heading_{lang}/{steps_key}."
+        translated_steps = entry.get(steps_key)
+        if not isinstance(translated_steps, list) or len(translated_steps) != len(steps):
+            return f"{field}['{part}']['{steps_key}'] must have {len(steps)} entries."
     return None
 
 
@@ -390,16 +393,19 @@ def edit_pattern(pattern_id):
     per-user staleness mechanism in UserPatternProgress keys off of.
 
     Optionally also accepts title_he/materials_he/abbreviations_he/
-    instructions_he -- present only when the uploader/an admin is
-    correcting the auto-translation (see POST /<id>/translate), never
-    required. Providing `instructions_he` (even as an explicit `{}`, e.g.
-    to clear a translation) is what signals "this request is editing the
-    Hebrew content"; omitting it entirely leaves any existing translation
-    untouched. A Hebrew-content edit sets translation_reviewed = True (an
-    edit *is* the review) but deliberately does NOT bump
-    instructions_version or notify anyone -- that mechanism is about the
-    canonical English structure changing shape, not a translation
-    correction.
+    instructions_he, and/or the exact same group suffixed _en instead --
+    present only when the uploader/an admin is correcting an auto-
+    translation (see POST /<id>/translate and /<id>/translate-to-english),
+    never required, and independent of each other (a pattern can have
+    either, both, or neither translation direction). Providing
+    `instructions_he`/`instructions_en` (even as an explicit `{}`, e.g. to
+    clear that translation) is what signals "this request is editing that
+    translation"; omitting it entirely leaves any existing translation in
+    that direction untouched. A translation edit sets
+    translation_reviewed/translation_en_reviewed = True (an edit *is* the
+    review) but deliberately does NOT bump instructions_version or notify
+    anyone -- that mechanism is about the pattern's own primary content
+    changing shape, not a translation correction.
     ---
     tags: [Patterns]
     parameters:
@@ -423,11 +429,15 @@ def edit_pattern(pattern_id):
             materials_he: {type: string}
             abbreviations_he: {type: string}
             instructions_he: {type: object}
+            title_en: {type: string}
+            materials_en: {type: string}
+            abbreviations_en: {type: string}
+            instructions_en: {type: object}
     responses:
       200:
         description: Pattern updated
       400:
-        description: title missing, or instructions_he doesn't match instructions' structure
+        description: title missing, or instructions_he/instructions_en doesn't match instructions' structure
       401:
         description: Not logged in
       403:
@@ -455,14 +465,19 @@ def edit_pattern(pattern_id):
     new_instructions = data.get("instructions") or {}
     instructions_changed = new_instructions != (pattern.instructions or {})
 
-    if "instructions_he" in data:
-        instructions_he = data.get("instructions_he") or {}
-        validation_error = _validate_instructions_he(new_instructions, instructions_he)
-        if validation_error:
-            # Raw message, not a fixed key -- see the scraper_error cases
-            # above for the same reasoning (this text names the specific
-            # part/step count that's wrong, generated per-request).
-            return jsonify({"error": validation_error, "code": "invalid_translation"}), 400
+    translated_instructions: dict[str, dict] = {}
+    for lang in ("he", "en"):
+        key = f"instructions_{lang}"
+        if key in data:
+            translated = data.get(key) or {}
+            validation_error = _validate_translated_instructions(new_instructions, translated, lang)
+            if validation_error:
+                # Raw message, not a fixed key -- see the scraper_error
+                # cases above for the same reasoning (this text names the
+                # specific part/step count that's wrong, generated
+                # per-request).
+                return jsonify({"error": validation_error, "code": "invalid_translation"}), 400
+            translated_instructions[lang] = translated
 
     pattern.title = title
     pattern.author = data.get("author") or None
@@ -480,12 +495,19 @@ def edit_pattern(pattern_id):
     if instructions_changed:
         pattern.instructions_version += 1
 
-    if "instructions_he" in data:
+    if "he" in translated_instructions:
         pattern.title_he = (data.get("title_he") or "").strip() or None
         pattern.materials_he = data.get("materials_he")
         pattern.abbreviations_he = data.get("abbreviations_he")
-        pattern.instructions_he = instructions_he
+        pattern.instructions_he = translated_instructions["he"]
         pattern.translation_reviewed = True
+
+    if "en" in translated_instructions:
+        pattern.title_en = (data.get("title_en") or "").strip() or None
+        pattern.materials_en = data.get("materials_en")
+        pattern.abbreviations_en = data.get("abbreviations_en")
+        pattern.instructions_en = translated_instructions["en"]
+        pattern.translation_en_reviewed = True
 
     db.session.commit()
 
@@ -894,6 +916,72 @@ def translate_pattern(pattern_id):
 
     return jsonify({
         "message": "Pattern translated to Hebrew.",
+        "pattern": pattern.to_dict(current_user_id=user_id),
+    }), 200
+
+
+@patterns_bp.route("/<int:pattern_id>/translate-to-english", methods=["POST"])
+def translate_pattern_to_english(pattern_id):
+    """
+    The reverse of POST /<id>/translate: auto-translates this pattern's
+    content to English instead of Hebrew, for a pattern whose *primary*
+    content is itself Hebrew (a Hebrew-sourced pattern -- see scraper.py's
+    Hebrew keyword support). Same rules as the Hebrew direction in every
+    other respect: no-ops if an English translation already exists,
+    same _can_view permission (translating doesn't touch the pattern's
+    authoritative primary content), same "correct it via PATCH /<id>
+    afterward" story.
+    ---
+    tags: [Patterns]
+    parameters:
+      - in: path
+        name: pattern_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Translated (or already had an English translation) -- pattern returned either way
+      401:
+        description: Not logged in
+      404:
+        description: No such pattern, or not visible to this user
+      502:
+        description: Translation call failed
+    """
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    user = User.query.get(user_id)
+    pattern = Pattern.query.get_or_404(pattern_id)
+    if not _can_view(user, pattern):
+        return jsonify({"error": "Pattern not found.", "code": "pattern_not_found"}), 404
+
+    if pattern.title_en:
+        return jsonify({
+            "message": "This pattern already has an English translation.",
+            "pattern": pattern.to_dict(current_user_id=user_id),
+        }), 200
+
+    try:
+        title_en, materials_en, abbreviations_en, instructions_en = (
+            translation.translate_pattern_to_english(
+                pattern.title, pattern.materials, pattern.abbreviations,
+                pattern.instructions or {},
+            )
+        )
+    except translation.TranslationError as exc:
+        return jsonify({"error": str(exc), "code": "translation_error"}), 502
+
+    pattern.title_en = title_en
+    pattern.materials_en = materials_en
+    pattern.abbreviations_en = abbreviations_en
+    pattern.instructions_en = instructions_en
+    pattern.translation_en_reviewed = False
+    db.session.commit()
+
+    return jsonify({
+        "message": "Pattern translated to English.",
         "pattern": pattern.to_dict(current_user_id=user_id),
     }), 200
 

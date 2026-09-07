@@ -39,7 +39,12 @@ export default function PatternCard({ pattern, onToggleSave, isSaved }: Props) {
       )}
       <Card.Body className="d-flex flex-column">
         <div className="d-flex justify-content-between align-items-start gap-2">
-          <Card.Title as={Link} to={`/pattern/${pattern.id}`} className="link-primary text-decoration-none">
+          <Card.Title
+            as={Link}
+            to={`/pattern/${pattern.id}`}
+            className="link-primary text-decoration-none"
+            dir="auto"
+          >
             {title}
           </Card.Title>
           {!pattern.is_public && (

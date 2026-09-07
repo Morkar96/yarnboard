@@ -4,6 +4,15 @@
  * backend/app/scraper.py), so every field here is editable rather than
  * read-only -- this is the human review step that makes the heuristic
  * extraction trustworthy enough to publish.
+ *
+ * Every text field uses dir="auto" rather than inheriting the page's
+ * ambient direction (which follows the UI language toggle, see
+ * main.tsx's applyDirection) -- a pattern's own content is independent of
+ * whatever language the UI chrome happens to be in (e.g. a Hebrew-
+ * sourced pattern reviewed while the UI is still in English, or vice
+ * versa), so each field needs to detect and align to *its own* text
+ * per-field, via the browser's native bidi algorithm, not the
+ * surrounding page's direction.
  */
 import { Button, Card, Form, InputGroup } from "react-bootstrap";
 import { useTranslation } from "react-i18next";
@@ -83,7 +92,11 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
     <div className="d-flex flex-column gap-3">
       <Form.Group controlId="review-title">
         <Form.Label>{t("reviewForm.titleLabel")}</Form.Label>
-        <Form.Control value={draft.title} onChange={(e) => updateField("title", e.target.value)} />
+        <Form.Control
+          dir="auto"
+          value={draft.title}
+          onChange={(e) => updateField("title", e.target.value)}
+        />
       </Form.Group>
 
       {draft.photo_url && (
@@ -114,6 +127,7 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
       <Form.Group controlId="review-author">
         <Form.Label>{t("reviewForm.authorLabel")}</Form.Label>
         <Form.Control
+          dir="auto"
           value={draft.author ?? ""}
           placeholder={t("reviewForm.authorPlaceholder")}
           onChange={(e) => updateField("author", e.target.value || null)}
@@ -124,6 +138,7 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
         <Form.Label>{t("reviewForm.materialsLabel")}</Form.Label>
         <Form.Control
           as="textarea"
+          dir="auto"
           rows={3}
           value={draft.materials}
           onChange={(e) => updateField("materials", e.target.value)}
@@ -134,6 +149,7 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
         <Form.Label>{t("reviewForm.abbreviationsLabel")}</Form.Label>
         <Form.Control
           as="textarea"
+          dir="auto"
           rows={3}
           value={draft.abbreviations}
           onChange={(e) => updateField("abbreviations", e.target.value)}
@@ -165,6 +181,7 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
               </Button>
               <Form.Control
                 className="fw-semibold"
+                dir="auto"
                 value={part}
                 onChange={(e) => updatePartName(part, e.target.value)}
               />
@@ -179,7 +196,11 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
             </InputGroup>
             {steps.map((step, index) => (
               <InputGroup key={index}>
-                <Form.Control value={step} onChange={(e) => updateStep(part, index, e.target.value)} />
+                <Form.Control
+                  dir="auto"
+                  value={step}
+                  onChange={(e) => updateStep(part, index, e.target.value)}
+                />
                 <Button
                   variant="outline-secondary"
                   onClick={() => deleteStep(part, index)}

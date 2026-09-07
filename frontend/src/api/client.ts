@@ -330,6 +330,17 @@ export function translatePattern(patternId: number) {
   );
 }
 
+/** The reverse of translatePattern -- translates to English instead of
+ * Hebrew, for a pattern whose own primary content is Hebrew (see
+ * backend/app/scraper.py's Hebrew keyword support). Same no-op-if-
+ * already-translated and slow-LLM-call behavior as the Hebrew direction. */
+export function translatePatternToEnglish(patternId: number) {
+  return request<{ message: string; pattern: Pattern }>(
+    `/api/patterns/${patternId}/translate-to-english`,
+    { method: "POST" },
+  );
+}
+
 /** Patterns the current user has stale (now-outdated) checklist progress
  * on -- drives the in-app "this pattern changed" banner. */
 export function fetchNotifications() {

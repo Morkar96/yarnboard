@@ -8,14 +8,16 @@
  * can't edit still safely fails, just with a plain error message instead
  * of hiding the page entirely.
  *
- * The Hebrew-translation section below is deliberately NOT built on
- * PatternReviewForm -- that component lets English instructions be
- * restructured freely (add/remove/reorder parts and steps), but the
- * Hebrew translation is required to mirror the English structure exactly
- * (same part-name keys, same per-part step counts -- see
- * Pattern.instructions_he's docstring in backend/app/models.py), so its
- * editor only ever edits *text* against a structure fixed by the English
- * side, never the structure itself. */
+ * The translation sections below (Hebrew, and its exact mirror English --
+ * see Pattern.instructions_en's docstring in backend/app/models.py for
+ * why a Hebrew-*primary* pattern needs an English overlay the same way
+ * an English-primary one needs a Hebrew overlay) are deliberately NOT
+ * built on PatternReviewForm -- that component lets the pattern's own
+ * primary-content instructions be restructured freely (add/remove/
+ * reorder parts and steps), but a translation is required to mirror that
+ * structure exactly (same part-name keys, same per-part step counts), so
+ * each translation editor only ever edits *text* against a structure
+ * fixed by the primary-content side, never the structure itself. */
 import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Button, Card, Form, Spinner } from "react-bootstrap";
 import { useTranslation } from "react-i18next";
@@ -29,7 +31,13 @@ import {
 } from "../api/client";
 import PatternReviewForm from "../components/PatternReviewForm";
 import { useApiErrorMessage } from "../i18n/useApiErrorMessage";
-import type { HebrewInstructionEntry, Pattern, PatternDraft, PatternEditPayload } from "../types/models";
+import type {
+  EnglishInstructionEntry,
+  HebrewInstructionEntry,
+  Pattern,
+  PatternDraft,
+  PatternEditPayload,
+} from "../types/models";
 import { useUnsavedChangesWarning } from "../utils/useUnsavedChangesWarning";
 
 /** Pattern.instructions is {part: [{step, completed}]} (viewer-specific
@@ -70,6 +78,24 @@ function patternToHeDraft(pattern: Pattern): HeDraft | null {
   };
 }
 
+interface EnDraft {
+  title_en: string;
+  materials_en: string;
+  abbreviations_en: string;
+  instructions_en: Record<string, EnglishInstructionEntry>;
+}
+
+function patternToEnDraft(pattern: Pattern): EnDraft | null {
+  const en = pattern.translations.en;
+  if (!en) return null;
+  return {
+    title_en: en.title,
+    materials_en: en.materials ?? "",
+    abbreviations_en: en.abbreviations ?? "",
+    instructions_en: en.instructions,
+  };
+}
+
 export default function EditPatternPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -79,6 +105,7 @@ export default function EditPatternPage() {
   const [pattern, setPattern] = useState<Pattern | null>(null);
   const [draft, setDraft] = useState<PatternDraft | null>(null);
   const [heDraft, setHeDraft] = useState<HeDraft | null>(null);
+  const [enDraft, setEnDraft] = useState<EnDraft | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,16 +126,18 @@ export default function EditPatternPage() {
         setPattern(p);
         const draft = patternToDraft(p);
         const heDraft = patternToHeDraft(p);
+        const enDraft = patternToEnDraft(p);
         setDraft(draft);
         setHeDraft(heDraft);
-        setInitialSnapshot(JSON.stringify({ draft, heDraft }));
+        setEnDraft(enDraft);
+        setInitialSnapshot(JSON.stringify({ draft, heDraft, enDraft }));
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [id]);
 
   useUnsavedChangesWarning(
-    initialSnapshot !== null && JSON.stringify({ draft, heDraft }) !== initialSnapshot,
+    initialSnapshot !== null && JSON.stringify({ draft, heDraft, enDraft }) !== initialSnapshot,
   );
 
   if (loading) return <Spinner animation="border" variant="primary" />;
@@ -130,6 +159,21 @@ export default function EditPatternPage() {
       const steps_he = [...(d.instructions_he[part]?.steps_he ?? [])];
       steps_he[index] = text;
       return { ...d, instructions_he: { ...d.instructions_he, [part]: { ...d.instructions_he[part], steps_he } } };
+    });
+  }
+
+  function updateEnHeading(part: string, heading_en: string) {
+    setEnDraft((d) =>
+      d ? { ...d, instructions_en: { ...d.instructions_en, [part]: { ...d.instructions_en[part], heading_en } } } : d,
+    );
+  }
+
+  function updateEnStep(part: string, index: number, text: string) {
+    setEnDraft((d) => {
+      if (!d) return d;
+      const steps_en = [...(d.instructions_en[part]?.steps_en ?? [])];
+      steps_en[index] = text;
+      return { ...d, instructions_en: { ...d.instructions_en, [part]: { ...d.instructions_en[part], steps_en } } };
     });
   }
 
@@ -175,24 +219,35 @@ export default function EditPatternPage() {
     setError(null);
     setSaving(true);
     try {
-      // Only attached when a translation already exists to edit -- see
-      // patternToHeDraft. If the English instructions above were also
-      // restructured in this same save (parts/steps added, removed, or
-      // reordered), the backend rejects the whole request rather than
-      // accepting a Hebrew translation that no longer structurally
-      // matches (see _validate_instructions_he in
+      // heDraft/enDraft fields are only attached when that translation
+      // already exists to edit -- see patternToHeDraft/patternToEnDraft.
+      // If the primary-content instructions above were also restructured
+      // in this same save (parts/steps added, removed, or reordered),
+      // the backend rejects the whole request rather than accepting a
+      // translation that no longer structurally matches (see
+      // _validate_translated_instructions in
       // backend/app/patterns/routes.py) -- a real but rare edge case,
       // surfaced via the normal error Alert below rather than specially
       // handled here.
-      const payload: PatternEditPayload = heDraft
-        ? {
-            ...draft,
-            title_he: heDraft.title_he,
-            materials_he: heDraft.materials_he,
-            abbreviations_he: heDraft.abbreviations_he,
-            instructions_he: heDraft.instructions_he,
-          }
-        : draft;
+      const payload: PatternEditPayload = {
+        ...draft,
+        ...(heDraft
+          ? {
+              title_he: heDraft.title_he,
+              materials_he: heDraft.materials_he,
+              abbreviations_he: heDraft.abbreviations_he,
+              instructions_he: heDraft.instructions_he,
+            }
+          : {}),
+        ...(enDraft
+          ? {
+              title_en: enDraft.title_en,
+              materials_en: enDraft.materials_en,
+              abbreviations_en: enDraft.abbreviations_en,
+              instructions_en: enDraft.instructions_en,
+            }
+          : {}),
+      };
       await updatePattern(pattern.id, payload);
       navigate(`/pattern/${pattern.id}`);
     } catch (err) {
@@ -257,7 +312,7 @@ export default function EditPatternPage() {
       <PatternReviewForm draft={draft} onChange={setDraft} />
 
       <div className="mt-4 pt-4 border-top">
-        <h2 className="h4 mb-3">{t("editPattern.translationHeading")}</h2>
+        <h2 className="h4 mb-3">{t("editPattern.translationHeadingHe")}</h2>
         {heDraft ? (
           <div className="d-flex flex-column gap-3">
             <Form.Group controlId="edit-translation-title">
@@ -294,7 +349,7 @@ export default function EditPatternPage() {
               <Card key={part} className="shadow-sm">
                 <Card.Body className="d-flex flex-column gap-2">
                   <div className="d-flex justify-content-between align-items-center gap-2">
-                    <span className="text-muted small flex-shrink-0">{part}</span>
+                    <span className="text-muted small flex-shrink-0" dir="auto">{part}</span>
                     <Form.Control
                       className="fw-semibold"
                       dir="rtl"
@@ -304,7 +359,7 @@ export default function EditPatternPage() {
                   </div>
                   {steps.map((step, index) => (
                     <div key={index} className="d-flex gap-2 align-items-start">
-                      <span className="text-muted small" style={{ flex: 1 }}>
+                      <span className="text-muted small" dir="auto" style={{ flex: 1 }}>
                         {step.step}
                       </span>
                       <Form.Control
@@ -312,6 +367,75 @@ export default function EditPatternPage() {
                         style={{ flex: 1 }}
                         value={heDraft.instructions_he[part]?.steps_he?.[index] ?? ""}
                         onChange={(e) => updateHeStep(part, index, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </Card.Body>
+              </Card>
+            ))}
+            <Form.Text className="text-muted">{t("editPattern.translationReviewedNotice")}</Form.Text>
+          </div>
+        ) : (
+          <p className="text-muted">{t("editPattern.translationNotYetAvailable")}</p>
+        )}
+      </div>
+
+      <div className="mt-4 pt-4 border-top">
+        <h2 className="h4 mb-3">{t("editPattern.translationHeadingEn")}</h2>
+        {enDraft ? (
+          <div className="d-flex flex-column gap-3">
+            <Form.Group controlId="edit-translation-title-en">
+              <Form.Label>{t("editPattern.translationTitleLabel")}</Form.Label>
+              <Form.Control
+                dir="auto"
+                value={enDraft.title_en}
+                onChange={(e) => setEnDraft((d) => (d ? { ...d, title_en: e.target.value } : d))}
+              />
+            </Form.Group>
+            <Form.Group controlId="edit-translation-materials-en">
+              <Form.Label>{t("editPattern.translationMaterialsLabel")}</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                dir="auto"
+                value={enDraft.materials_en}
+                onChange={(e) => setEnDraft((d) => (d ? { ...d, materials_en: e.target.value } : d))}
+              />
+            </Form.Group>
+            <Form.Group controlId="edit-translation-abbreviations-en">
+              <Form.Label>{t("editPattern.translationAbbreviationsLabel")}</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                dir="auto"
+                value={enDraft.abbreviations_en}
+                onChange={(e) => setEnDraft((d) => (d ? { ...d, abbreviations_en: e.target.value } : d))}
+              />
+            </Form.Group>
+
+            <h3 className="h6">{t("editPattern.translationInstructionsHeading")}</h3>
+            {Object.entries(pattern.instructions).map(([part, steps]) => (
+              <Card key={part} className="shadow-sm">
+                <Card.Body className="d-flex flex-column gap-2">
+                  <div className="d-flex justify-content-between align-items-center gap-2">
+                    <span className="text-muted small flex-shrink-0" dir="auto">{part}</span>
+                    <Form.Control
+                      className="fw-semibold"
+                      dir="auto"
+                      value={enDraft.instructions_en[part]?.heading_en ?? ""}
+                      onChange={(e) => updateEnHeading(part, e.target.value)}
+                    />
+                  </div>
+                  {steps.map((step, index) => (
+                    <div key={index} className="d-flex gap-2 align-items-start">
+                      <span className="text-muted small" dir="auto" style={{ flex: 1 }}>
+                        {step.step}
+                      </span>
+                      <Form.Control
+                        dir="auto"
+                        style={{ flex: 1 }}
+                        value={enDraft.instructions_en[part]?.steps_en?.[index] ?? ""}
+                        onChange={(e) => updateEnStep(part, index, e.target.value)}
                       />
                     </div>
                   ))}

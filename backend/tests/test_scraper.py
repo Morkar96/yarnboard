@@ -71,6 +71,48 @@ def test_parse_pattern_html_degrades_gracefully_on_content_free_page():
     assert draft["photo_url"] is None
 
 
+def test_parse_pattern_html_recognizes_hebrew_section_keywords():
+    """MATERIALS_KEYWORDS/ABBREVIATIONS_KEYWORDS/INSTRUCTIONS_KEYWORDS all
+    carry Hebrew equivalents alongside the English ones -- a Hebrew-
+    language pattern page should extract exactly as well as an English
+    one, not come back empty just because the section headers aren't in
+    English (see _classify_lines' docstring)."""
+    html = """
+    <html><head><title>דוגמית כובע חמים</title></head>
+    <body>
+      <h1>דוגמית כובע חמים</h1>
+      <p>מאת דנה כהן</p>
+      <h2>חומרים</h2>
+      <ul>
+        <li>פקעת אחת של חוט עבה</li>
+        <li>מסרגות 4.5 מ"מ</li>
+      </ul>
+      <h2>קיצורים</h2>
+      <p>ע: עמוד<br>שר: שרשרת</p>
+      <h2>הוראות</h2>
+      <strong>חלק 1: שוליים</strong>
+      <ul>
+        <li>להעלות 88 עיניים.</li>
+        <li>לסגור לעיגול.</li>
+      </ul>
+      <strong>חלק 2: גוף</strong>
+      <ul>
+        <li>לסרוג עד שהעבודה מגיעה ל-15 ס"מ.</li>
+      </ul>
+    </body></html>
+    """
+    draft = parse_pattern_html(html, "https://example.co.il/hat-pattern")
+
+    assert draft["author"] == "דנה כהן"
+    assert "פקעת אחת של חוט עבה" in draft["materials"]
+    assert "ע: עמוד" in draft["abbreviations"]
+    assert list(draft["instructions"].keys()) == ["חלק 1: שוליים", "חלק 2: גוף"]
+    assert draft["instructions"]["חלק 1: שוליים"] == [
+        "להעלות 88 עיניים.",
+        "לסגור לעיגול.",
+    ]
+
+
 def test_extract_image_url_prefers_og_image_over_twitter_image():
     html = """
     <html><head>

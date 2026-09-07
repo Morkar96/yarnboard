@@ -159,26 +159,45 @@ class Pattern(db.Model):
     # ever views in Hebrew never costs a translation API call.
     #
     # instructions_he is keyed by the *exact same keys* as `instructions`
-    # (English part names) -- never translated keys of its own. Each value
-    # is {"heading_he": str, "steps_he": [str, ...]}, with steps_he the
-    # same length as the corresponding English steps list. This is
-    # deliberate: UserPatternProgress.completed_steps and toggle_progress
-    # (see below, and patterns/routes.py) key checklist progress by the
-    # English part name string, so a Hebrew-mode checklist looks up
-    # instructions_he[part] purely for display text while still reporting
-    # progress against the same English `part`/index the English view
-    # would use. If instructions_he ever had its own translated keys,
-    # Hebrew-mode progress would have nothing compatible to attach to.
-    # The edit endpoint enforces this shape (same keys, same list lengths)
-    # rather than trusting it.
+    # (the pattern's own primary-content part names, whatever language
+    # those happen to be in -- see the scraper's Hebrew keyword support in
+    # scraper.py, a pattern's primary content isn't always English) --
+    # never translated keys of its own. Each value is {"heading_he": str,
+    # "steps_he": [str, ...]}, with steps_he the same length as the
+    # corresponding primary steps list. This is deliberate:
+    # UserPatternProgress.completed_steps and toggle_progress (see below,
+    # and patterns/routes.py) key checklist progress by the primary part
+    # name string, so a Hebrew-mode checklist looks up instructions_he[part]
+    # purely for display text while still reporting progress against the
+    # same primary `part`/index the primary-language view would use. If
+    # instructions_he ever had its own translated keys, Hebrew-mode
+    # progress would have nothing compatible to attach to. The edit
+    # endpoint enforces this shape (same keys, same list lengths) rather
+    # than trusting it.
     title_he = db.Column(db.String(200), nullable=True)
     materials_he = db.Column(db.Text, nullable=True)
     abbreviations_he = db.Column(db.Text, nullable=True)
     instructions_he = db.Column(db.JSON, nullable=True)
     # False until a human (uploader or admin) has confirmed the
-    # auto-translation -- see _validate_instructions_he in
+    # auto-translation -- see _validate_translated_instructions in
     # patterns/routes.py's edit_pattern, which is what flips this True.
     translation_reviewed = db.Column(db.Boolean, nullable=False, default=False)
+
+    # English translation -- the exact mirror of the title_he/materials_he/
+    # abbreviations_he/instructions_he/translation_reviewed group above,
+    # for a pattern whose *primary* content is itself Hebrew (a Hebrew
+    # source page, scraped via scraper.py's Hebrew keyword support) and
+    # needs an English overlay instead. Same POST /<id>/translate-to-
+    # english on-demand trigger, same instructions_en key-preservation
+    # rule (English-mode checklist progress still keyed by the pattern's
+    # own primary part names), same PATCH /<id> edit/review path -- see
+    # each _he field's docstring above for the reasoning, which applies
+    # here unchanged just with the language swapped.
+    title_en = db.Column(db.String(200), nullable=True)
+    materials_en = db.Column(db.Text, nullable=True)
+    abbreviations_en = db.Column(db.Text, nullable=True)
+    instructions_en = db.Column(db.JSON, nullable=True)
+    translation_en_reviewed = db.Column(db.Boolean, nullable=False, default=False)
 
     uploader_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
@@ -308,6 +327,13 @@ class Pattern(db.Model):
                     "instructions": self.instructions_he,
                     "reviewed": self.translation_reviewed,
                 } if self.title_he else None,
+                "en": {
+                    "title": self.title_en,
+                    "materials": self.materials_en,
+                    "abbreviations": self.abbreviations_en,
+                    "instructions": self.instructions_en,
+                    "reviewed": self.translation_en_reviewed,
+                } if self.title_en else None,
             },
             "uploader": self.uploader.username if self.uploader else "Unknown",
             "uploader_id": self.uploader_id,

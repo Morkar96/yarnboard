@@ -12,28 +12,34 @@
  * section and want it out of the way), and a single "Collapse/Expand all"
  * toggle above the list controls every part at once.
  *
- * `instructionsHe` (optional) is a pure *display* overlay, shown instead
- * of the English text when the UI language is Hebrew -- but `part`/
- * `index` passed to toggleProgress (or cached for a guest), and every
- * state key here, always stay the canonical English identifiers
- * regardless of what's on screen. See Pattern.instructions_he's docstring
- * in backend/app/models.py for why: checklist progress is keyed by the
- * English part name, so a Hebrew-mode checklist would have nowhere
- * compatible to store progress against if it used its own translated
- * keys instead of looking them up against the same English structure.
+ * `instructionsHe`/`instructionsEn` (both optional) are pure *display*
+ * overlays, shown instead of the pattern's own primary-content text when
+ * the UI language matches that direction -- whichever of the two matches
+ * the current UI language wins, falling back to the primary text if that
+ * direction has no translation yet (see PatternDetailPage's identical
+ * fallback for title/materials/abbreviations). But `part`/`index` passed
+ * to toggleProgress (or cached for a guest), and every state key here,
+ * always stay the pattern's own primary-content identifiers regardless
+ * of what's on screen. See Pattern.instructions_he/instructions_en's
+ * docstrings in backend/app/models.py for why: checklist progress is
+ * keyed by the primary part name, so an overlaid-language checklist
+ * would have nowhere compatible to store progress against if it used its
+ * own translated keys instead of looking them up against the same
+ * primary structure.
  */
 import { useState } from "react";
 import { Alert, Button, Card, Collapse, Form } from "react-bootstrap";
 import { useTranslation } from "react-i18next";
 import { toggleProgress } from "../api/client";
 import { useAuth } from "../context/AuthContext";
-import type { HebrewInstructionEntry, InstructionsMap } from "../types/models";
+import type { EnglishInstructionEntry, HebrewInstructionEntry, InstructionsMap } from "../types/models";
 import { getGuestProgress, setGuestStep } from "../utils/guestProgress";
 
 interface Props {
   patternId: number;
   instructions: InstructionsMap;
   instructionsHe?: Record<string, HebrewInstructionEntry> | null;
+  instructionsEn?: Record<string, EnglishInstructionEntry> | null;
 }
 
 /** Overlay any cached guest progress onto server-provided instructions
@@ -51,10 +57,11 @@ function withGuestProgress(patternId: number, instructions: InstructionsMap, isG
   return result;
 }
 
-export default function PatternChecklist({ patternId, instructions, instructionsHe }: Props) {
+export default function PatternChecklist({ patternId, instructions, instructionsHe, instructionsEn }: Props) {
   const { user } = useAuth();
   const { t, i18n } = useTranslation();
   const showHebrew = i18n.language === "he" && !!instructionsHe;
+  const showEnglish = i18n.language === "en" && !!instructionsEn;
   const [localInstructions, setLocalInstructions] = useState(() =>
     withGuestProgress(patternId, instructions, !user),
   );
@@ -117,11 +124,16 @@ export default function PatternChecklist({ patternId, instructions, instructions
 
       {parts.map(([part, steps]) => {
         const isCollapsed = collapsedParts.has(part);
-        const heading = showHebrew ? (instructionsHe?.[part]?.heading_he ?? part) : part;
+        const heading = showHebrew
+          ? (instructionsHe?.[part]?.heading_he ?? part)
+          : showEnglish
+            ? (instructionsEn?.[part]?.heading_en ?? part)
+            : part;
         return (
           <Card key={part} className="shadow-sm">
             <Card.Header
               className="bg-white fw-semibold d-flex justify-content-between align-items-center"
+              dir="auto"
               role="button"
               onClick={() => togglePart(part)}
               aria-expanded={!isCollapsed}
@@ -135,13 +147,16 @@ export default function PatternChecklist({ patternId, instructions, instructions
                   {steps.map((step, index) => {
                     const label = showHebrew
                       ? (instructionsHe?.[part]?.steps_he?.[index] ?? step.step)
-                      : step.step;
+                      : showEnglish
+                        ? (instructionsEn?.[part]?.steps_en?.[index] ?? step.step)
+                        : step.step;
                     return (
                       <Form.Check
                         key={index}
                         type="checkbox"
                         id={`${part}-${index}`}
                         label={label}
+                        dir="auto"
                         checked={step.completed}
                         onChange={(e) => handleToggle(part, index, e.target.checked)}
                       />
