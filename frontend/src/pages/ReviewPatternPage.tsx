@@ -16,6 +16,7 @@ import { submitPattern } from "../api/client";
 import PatternReviewForm from "../components/PatternReviewForm";
 import { useApiErrorMessage } from "../i18n/useApiErrorMessage";
 import type { PatternDraft } from "../types/models";
+import { useUnsavedChangesWarning } from "../utils/useUnsavedChangesWarning";
 
 interface LocationState {
   draft: PatternDraft;
@@ -32,6 +33,15 @@ export default function ReviewPatternPage() {
   const [draft, setDraft] = useState<PatternDraft | null>(state?.draft ?? null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Warn on tab close/refresh once the draft has actually been touched --
+  // comparing against the original scraped draft (not just "any draft
+  // exists") so simply opening this page doesn't itself count as unsaved
+  // work. Cleared once saving succeeds and this page navigates away, so
+  // that navigation itself doesn't trigger the prompt.
+  useUnsavedChangesWarning(
+    !!draft && !!state && JSON.stringify(draft) !== JSON.stringify(state.draft),
+  );
 
   if (!state || !draft) {
     // Reached directly (e.g. page refresh) without a draft in memory --

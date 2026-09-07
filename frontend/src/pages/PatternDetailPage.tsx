@@ -68,20 +68,10 @@ export default function PatternDetailPage() {
   if (loading) return <Spinner animation="border" variant="primary" />;
   if (notFound || !pattern) return <p className="text-muted">{t("patternDetail.notFound")}</p>;
 
-  const canEdit = !!user && (user.is_admin || user.id === pattern.uploader_id);
-  // Whichever translation matches the current UI language, falling back
-  // to the pattern's own primary content -- see the module docstring above.
-  const translationForUiLanguage =
-    i18n.language === "he" ? pattern.translations.he : i18n.language === "en" ? pattern.translations.en : null;
-  const title = translationForUiLanguage?.title ?? pattern.title;
-  const materials = translationForUiLanguage?.materials ?? pattern.materials;
-  const abbreviations = translationForUiLanguage?.abbreviations ?? pattern.abbreviations;
-  const he = pattern.translations.he;
-  const en = pattern.translations.en;
-  // Only offer translating *away* from whatever the pattern's own
-  // primary content already looks like it's in -- translating Hebrew to
-  // Hebrew (or English to English) isn't a real action.
-  const primaryIsHebrew = looksHebrew(pattern.title);
+  const he = i18n.language === "he" ? pattern.translations.he : null;
+  const title = he?.title ?? pattern.title;
+  const materials = he?.materials ?? pattern.materials;
+  const abbreviations = he?.abbreviations ?? pattern.abbreviations;
 
   async function handleTranslate() {
     if (!pattern) return;
@@ -114,8 +104,8 @@ export default function PatternDetailPage() {
   return (
     <div>
       <div className="d-flex justify-content-between align-items-start">
-        <h1 className="mb-2" dir="auto">{title}</h1>
-        {canEdit && (
+        <h1 className="mb-2">{title}</h1>
+        {pattern.can_edit && (
           <Link to={`/pattern/${pattern.id}/edit`} className="btn btn-outline-primary btn-sm">
             {t("patternDetail.edit")}
           </Link>
@@ -123,7 +113,7 @@ export default function PatternDetailPage() {
       </div>
       <AttributionTag pattern={pattern} />
 
-      {canEdit && <PatternVisibilityPanel pattern={pattern} onPatternChange={setPattern} />}
+      {pattern.can_manage && <PatternVisibilityPanel pattern={pattern} onPatternChange={setPattern} />}
 
       {pattern.chart_grid ? (
         <PatternChartGrid grid={pattern.chart_grid} />

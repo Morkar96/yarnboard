@@ -49,14 +49,29 @@ export interface Pattern {
    * public to everyone. */
   is_public: boolean;
   created_at: string | null;
+  /** Computed by the backend for the current viewer (see Pattern.to_dict
+   * in models.py) -- true for the uploader, an admin, or a user with an
+   * edit-level PatternShare. Drives whether the Edit link/page and
+   * checklist-instructions edits are available; doesn't include managing
+   * sharing/publishing/deletion, see can_manage for that. */
+  can_edit: boolean;
+  /** True only for the uploader or an admin -- gates
+   * PatternVisibilityPanel (publish/unpublish/delete/manage shares),
+   * which an edit-level share can't do even though can_edit is true for
+   * them. */
+  can_manage: boolean;
 }
 
 /** One user a pattern has been individually shared with (see POST/GET/
- * DELETE /api/patterns/<id>/shares) -- independent of Pattern.is_public. */
+ * PATCH/DELETE /api/patterns/<id>/shares) -- independent of
+ * Pattern.is_public. can_edit decides whether this grant is view-only or
+ * also lets that user edit the pattern's content; changeable anytime via
+ * updateSharePermission, not fixed at grant time. */
 export interface PatternShare {
   id: number;
   user_id: number;
   username: string;
+  can_edit: boolean;
   created_at: string | null;
 }
 
@@ -176,7 +191,35 @@ export interface PatternDraft {
 export interface PreviewResponse {
   duplicate: boolean;
   existing_pattern_id: number | null;
+  /** Set when this exact URL is already a pattern someone else shared
+   * with you -- informational only, doesn't block submitting your own
+   * copy (a share can be revoked at any time, and you're entitled to
+   * your own copy regardless). See _shared_pattern_id in
+   * backend/app/patterns/routes.py. */
+  already_shared_with_you: number | null;
   draft: PatternDraft | null;
+}
+
+/** One notification type this app knows about -- must match
+ * notifications.NOTIFICATION_TYPES in the backend. */
+export type NotificationType = "pattern_updated" | "pattern_shared";
+
+export type NotificationChannelSettings = { email: boolean; in_app: boolean };
+
+/** This user's per-type email/in-app toggles (see GET/PATCH
+ * /api/notification-settings) -- every NotificationType key is always
+ * present, defaulting to {email: true, in_app: true}. */
+export type NotificationSettings = Record<NotificationType, NotificationChannelSettings>;
+
+/** One in-app notification (see GET /api/notifications). `link`, when
+ * present, is an in-app path (e.g. "/pattern/42") to navigate to on click. */
+export interface AppNotification {
+  id: number;
+  type: NotificationType;
+  message: string;
+  link: string | null;
+  read: boolean;
+  created_at: string | null;
 }
 
 /** A saved Stitch Fiddle (stitchfiddle.com) chart share link -- private to

@@ -1,7 +1,8 @@
-import { Button, Container, Nav, Navbar } from "react-bootstrap";
+import { Button, Container, Nav, Navbar, NavDropdown } from "react-bootstrap";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import NotificationBell from "./NotificationBell";
 
 export default function NavBar() {
   const { user, logout } = useAuth();
@@ -61,10 +62,18 @@ export default function NavBar() {
             </Button>
             {user ? (
               <>
-                <Navbar.Text>{t("nav.greeting", { username: user.username })}</Navbar.Text>
-                <Button variant="outline-light" size="sm" onClick={handleLogout}>
-                  {t("nav.logout")}
-                </Button>
+                <NotificationBell />
+                <NavDropdown
+                  title={t("nav.greeting", { username: user.username })}
+                  id="account-nav-dropdown"
+                  align="end"
+                >
+                  <NavDropdown.Item as={Link} to="/settings/notifications">
+                    {t("nav.notificationSettings")}
+                  </NavDropdown.Item>
+                  <NavDropdown.Divider />
+                  <NavDropdown.Item onClick={handleLogout}>{t("nav.logout")}</NavDropdown.Item>
+                </NavDropdown>
               </>
             ) : (
               <>

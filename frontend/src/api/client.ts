@@ -14,6 +14,9 @@
  * two dev servers really are on different ports.
  */
 import type {
+  AppNotification,
+  NotificationSettings,
+  NotificationType,
   Pattern,
   PatternDraft,
   PatternEditPayload,
@@ -96,10 +99,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 // --- Auth -------------------------------------------------------------
 
-export function register(username: string, email: string, password: string) {
+/** `guestProgress`, if given, is this browser's pre-login checklist
+ * progress (see utils/guestProgress.ts's getAllGuestProgress) -- merged
+ * into real UserPatternProgress rows for the new account server-side
+ * (see auth/routes.py's _merge_guest_progress). Omit it (or pass an
+ * empty object) for a plain registration with nothing to merge. */
+export function register(
+  username: string,
+  email: string,
+  password: string,
+  guestProgress?: Record<string, Record<string, boolean[]>>,
+) {
   return request<{ message: string }>("/api/register", {
     method: "POST",
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify({
+      username, email, password,
+      ...(guestProgress && Object.keys(guestProgress).length > 0 ? { guest_progress: guestProgress } : {}),
+    }),
   });
 }
 
@@ -227,13 +243,32 @@ export function fetchPattern(patternId: number) {
   return request<Pattern>(`/api/patterns/${patternId}`);
 }
 
-/** Makes a private pattern community-visible. One-way -- there's no
- * unpublish. 403s for anyone but the uploader/an admin (same permission
- * rule as updatePattern); 409s if a different pattern is already public
- * for this same original_url. */
+/** Makes a private pattern community-visible. Reversible via
+ * unpublishPattern below. 403s for anyone but the uploader/an admin (see
+ * _can_manage in patterns/routes.py); 409s if a different pattern is
+ * already public for this same original_url. */
 export function publishPattern(patternId: number) {
   return request<{ message: string; pattern: Pattern }>(`/api/patterns/${patternId}/publish`, {
     method: "POST",
+  });
+}
+
+/** Reverses a previous publish -- the pattern goes back to private, and
+ * its URL becomes claimable again by another uploader's already-
+ * submitted private copy. Same permission rule as publish. No-ops if
+ * already private. */
+export function unpublishPattern(patternId: number) {
+  return request<{ message: string; pattern: Pattern }>(`/api/patterns/${patternId}/unpublish`, {
+    method: "POST",
+  });
+}
+
+/** Permanently deletes a pattern -- uploader or an admin only, never an
+ * edit-level share. Cascades to its shares and everyone's checklist
+ * progress on it server-side. */
+export function deletePattern(patternId: number) {
+  return request<{ message: string }>(`/api/patterns/${patternId}`, {
+    method: "DELETE",
   });
 }
 
@@ -243,12 +278,24 @@ export function fetchPatternShares(patternId: number) {
   return request<PatternShare[]>(`/api/patterns/${patternId}/shares`);
 }
 
-/** Grants one user (by exact username) view access to a pattern that
- * isn't public. Idempotent -- returns the current share list either way. */
-export function sharePattern(patternId: number, username: string) {
+/** Grants one user (by exact username) access to a pattern that isn't
+ * public -- view-only by default, or edit access with canEdit=true.
+ * Idempotent -- sharing with someone who already has access just
+ * returns the current list unchanged (use updateSharePermission to
+ * change an existing grant's level). */
+export function sharePattern(patternId: number, username: string, canEdit = false) {
   return request<PatternShare[]>(`/api/patterns/${patternId}/shares`, {
     method: "POST",
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ username, can_edit: canEdit }),
+  });
+}
+
+/** Changes an existing share's permission level (view <-> edit). 404s if
+ * that user doesn't currently have a share. */
+export function updateSharePermission(patternId: number, userId: number, canEdit: boolean) {
+  return request<PatternShare[]>(`/api/patterns/${patternId}/shares/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ can_edit: canEdit }),
   });
 }
 
@@ -351,4 +398,41 @@ export function importStitchFiddleLink(linkId: number) {
     `/api/stitch-fiddle/links/${linkId}/import`,
     { method: "POST" },
   );
+}
+
+// --- Notification settings + inbox ---------------------------------------
+
+/** This user's per-type email/in-app toggles -- every NotificationType key
+ * is always present, defaulting to on. */
+export function fetchNotificationSettings() {
+  return request<NotificationSettings>("/api/notification-settings");
+}
+
+/** Partial update: only the type(s)/channel(s) present in `updates` are
+ * changed, everything else is left as-is. Returns the full, freshly
+ * merged settings (same shape fetchNotificationSettings returns). */
+export function updateNotificationSettings(
+  updates: Partial<Record<NotificationType, Partial<{ email: boolean; in_app: boolean }>>>,
+) {
+  return request<NotificationSettings>("/api/notification-settings", {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+
+/** This user's in-app notification inbox, newest first. */
+export function fetchNotificationInbox() {
+  return request<AppNotification[]>("/api/notifications");
+}
+
+export function markNotificationRead(notificationId: number) {
+  return request<AppNotification>(`/api/notifications/${notificationId}/read`, {
+    method: "POST",
+  });
+}
+
+export function markAllNotificationsRead() {
+  return request<{ message: string }>("/api/notifications/read-all", {
+    method: "POST",
+  });
 }
