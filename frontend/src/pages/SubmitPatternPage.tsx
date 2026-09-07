@@ -46,7 +46,12 @@ export default function SubmitPatternPage() {
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [sharedWarningId, setSharedWarningId] = useState<number | null>(null);
+  // Set instead of navigating straight to review when the preview came
+  // back with already_shared_with_you -- the warning has to actually be
+  // seen and give the user a real choice (view the shared pattern
+  // instead, or continue with their own copy), not just flash by while
+  // the page navigates on regardless (see handleContinueAnyway).
+  const [pendingSharedResult, setPendingSharedResult] = useState<PreviewResult | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
@@ -56,18 +61,25 @@ export default function SubmitPatternPage() {
       navigate(`/pattern/${result.existing_pattern_id}`);
       return;
     }
+    if (result.already_shared_with_you) {
+      setPendingSharedResult(result);
+      return;
+    }
     navigate("/submit/review", { state: { draft: result.draft, originalUrl: url } });
+  }
+
+  function handleContinueAnyway() {
+    if (!pendingSharedResult) return;
+    navigate("/submit/review", { state: { draft: pendingSharedResult.draft, originalUrl: url } });
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    setSharedWarningId(null);
+    setPendingSharedResult(null);
     setLoading(true);
     try {
-      const result = await previewPattern(url);
-      if (result.already_shared_with_you) setSharedWarningId(result.already_shared_with_you);
-      goToReview(result);
+      goToReview(await previewPattern(url));
     } catch (err) {
       setError(getErrorMessage(err, t("submit.genericFetchError")));
       // Any preview failure (blocked by bot-detection, timed out, DNS
@@ -84,12 +96,10 @@ export default function SubmitPatternPage() {
     e.preventDefault();
     if (!uploadFile) return;
     setUploadError(null);
-    setSharedWarningId(null);
+    setPendingSharedResult(null);
     setUploadLoading(true);
     try {
-      const result = await previewPatternFromUpload(url, uploadFile);
-      if (result.already_shared_with_you) setSharedWarningId(result.already_shared_with_you);
-      goToReview(result);
+      goToReview(await previewPatternFromUpload(url, uploadFile));
     } catch (err) {
       setUploadError(getErrorMessage(err, t("submit.genericUploadError")));
     } finally {
@@ -124,10 +134,20 @@ export default function SubmitPatternPage() {
             </Button>
           </ButtonGroup>
 
-          {sharedWarningId && (
+          {pendingSharedResult?.already_shared_with_you && (
             <Alert variant="warning" style={{ maxWidth: "32rem" }}>
-              {t("sharedWithMe.alreadySharedWarning")}{" "}
-              <Link to={`/pattern/${sharedWarningId}`}>{t("submit.viewSharedPattern")}</Link>
+              <p className="mb-2">{t("sharedWithMe.alreadySharedWarning")}</p>
+              <div className="d-flex gap-2">
+                <Link
+                  to={`/pattern/${pendingSharedResult.already_shared_with_you}`}
+                  className="btn btn-outline-primary btn-sm"
+                >
+                  {t("submit.viewSharedPattern")}
+                </Link>
+                <Button variant="outline-secondary" size="sm" onClick={handleContinueAnyway}>
+                  {t("submit.continueAnyway")}
+                </Button>
+              </div>
             </Alert>
           )}
 

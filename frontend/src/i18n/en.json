@@ -90,7 +90,7 @@
   "sharedWithMe": {
     "title": "Shared with Me",
     "empty": "Nobody has shared a pattern with you yet.",
-    "alreadySharedWarning": "Someone already shared a pattern from this URL with you --"
+    "alreadySharedWarning": "Someone already shared a pattern from this URL with you. You can view that one instead, or continue and save your own copy."
   },
   "notifications": {
     "bellLabel": "Notifications",
@@ -125,24 +125,25 @@
     "genericFetchError": "Could not fetch that page. Check the URL and try again.",
     "modeLink": "From a link",
     "modeUpload": "Upload a file",
-    "uploadIntro": "Upload a saved HTML page or a PDF -- useful if a site blocks automatic fetching, or if the pattern only exists as a PDF in the first place (e.g. a paid Etsy/Ravelry download). The URL is still used to credit the original source and to avoid duplicates.",
+    "uploadIntro": "Upload a saved HTML page or a PDF - useful if a site blocks automatic fetching, or if the pattern only exists as a PDF in the first place (e.g. a paid Etsy/Ravelry download). The URL is still used to credit the original source and to avoid duplicates.",
     "uploadUrlHint": "Even though you're uploading a file, the original page's URL is still needed for attribution and to avoid duplicates.",
     "uploadFileLabel": "Saved HTML or PDF file",
     "uploadButton": "Preview from file",
     "processing": "Processing...",
     "genericUploadError": "Could not process that file.",
-    "viewSharedPattern": "view it here",
+    "viewSharedPattern": "View shared pattern",
+    "continueAnyway": "Continue with my own copy",
     "guestPromptLogin": "Log in",
     "guestPromptSignup": "sign up",
-    "guestPromptTail": "to actually submit a pattern -- uploads are tied to an account so you can edit them later.",
+    "guestPromptTail": "to actually submit a pattern - uploads are tied to an account so you can edit them later.",
     "alreadyHaveIntro": "Already have this pattern saved? Check the",
     "communityPage": "Community",
-    "alreadyHaveTail": "page first -- Yarnboard avoids storing the same source URL twice."
+    "alreadyHaveTail": "page first - Yarnboard avoids storing the same source URL twice."
   },
   "review": {
     "title": "Review before saving",
     "sourceLabel": "Source: {{url}}",
-    "saveNotice": "This pattern is saved privately to your account -- only you (and admins) can see it until you choose to publish it to the community from the pattern's page.",
+    "saveNotice": "This pattern is saved privately to your account - only you (and admins) can see it until you choose to publish it to the community from the pattern's page.",
     "saveButton": "Save Pattern",
     "saving": "Saving...",
     "saveFailed": "Saving failed."
