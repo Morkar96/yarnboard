@@ -31,7 +31,13 @@ import {
 } from "../api/client";
 import PatternReviewForm from "../components/PatternReviewForm";
 import { useApiErrorMessage } from "../i18n/useApiErrorMessage";
-import type { HebrewInstructionEntry, Pattern, PatternDraft, PatternEditPayload } from "../types/models";
+import type {
+  EnglishInstructionEntry,
+  HebrewInstructionEntry,
+  Pattern,
+  PatternDraft,
+  PatternEditPayload,
+} from "../types/models";
 import { useUnsavedChangesWarning } from "../utils/useUnsavedChangesWarning";
 
 /** Pattern.instructions is {part: [{step, completed}]} (viewer-specific
@@ -120,16 +126,18 @@ export default function EditPatternPage() {
         setPattern(p);
         const draft = patternToDraft(p);
         const heDraft = patternToHeDraft(p);
+        const enDraft = patternToEnDraft(p);
         setDraft(draft);
         setHeDraft(heDraft);
-        setInitialSnapshot(JSON.stringify({ draft, heDraft }));
+        setEnDraft(enDraft);
+        setInitialSnapshot(JSON.stringify({ draft, heDraft, enDraft }));
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [id]);
 
   useUnsavedChangesWarning(
-    initialSnapshot !== null && JSON.stringify({ draft, heDraft }) !== initialSnapshot,
+    initialSnapshot !== null && JSON.stringify({ draft, heDraft, enDraft }) !== initialSnapshot,
   );
 
   if (loading) return <Spinner animation="border" variant="primary" />;
