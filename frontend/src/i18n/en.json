@@ -24,13 +24,13 @@
     "welcomeNamed": "Welcome, {{username}}",
     "subtitle": "Here's how to get the most out of Yarnboard.",
     "stitchFiddleTitle": "Import a Stitch Fiddle chart",
-    "stitchFiddleDescription": "Save a stitchfiddle.com share link, then import it with one click. Yarnboard turns the chart into a colored grid you can view alongside a plain color-key list -- no written instructions, since that's a premium Stitch Fiddle feature, but you can always add your own via the pattern's Edit page afterwards.",
+    "stitchFiddleDescription": "Save a stitchfiddle.com share link, then import it with one click. Yarnboard turns the chart into a colored grid you can view alongside a plain color-key list - no written instructions, since that's a premium Stitch Fiddle feature, but you can always add your own via the pattern's Edit page afterwards.",
     "stitchFiddleCta": "Import a chart",
     "submitTitle": "Submit a pattern from a URL or PDF",
-    "submitDescription": "Paste a link to a pattern page and Yarnboard scrapes the materials, abbreviations, and instructions automatically. If a site blocks automatic fetching, or the pattern only exists as a PDF (e.g. a paid Etsy/Ravelry download), upload the saved page or PDF instead. Either way, you review and can edit everything, and it's saved privately to your account -- you choose when (or whether) to publish it to the community.",
+    "submitDescription": "Paste a link to a pattern page and Yarnboard scrapes the materials, abbreviations, and instructions automatically. If a site blocks automatic fetching, or the pattern only exists as a PDF (e.g. a paid Etsy/Ravelry download), upload the saved page or PDF instead. Either way, you review and can edit everything, and it's saved privately to your account - you choose when (or whether) to publish it to the community.",
     "submitCta": "Submit a pattern",
     "useTitle": "Use an existing pattern",
-    "useDescription": "Browse everything the community has published, save the ones you want to come back to, and check off each instruction step as you work -- your progress is tracked per pattern, just for you.",
+    "useDescription": "Browse everything the community has published, save the ones you want to come back to, and check off each instruction step as you work - your progress is tracked per pattern, just for you.",
     "useCta": "Browse the community",
     "editTitle": "Edit a pattern you've uploaded",
     "editDescription": "Fix a typo, update materials, or add missing steps on any pattern you submitted, from My Uploads. Heads up: editing a pattern's instructions resets everyone's checklist progress on it, since the steps may no longer line up.",
@@ -45,8 +45,8 @@
       "submitting": "Logging in...",
       "failed": "Login failed.",
       "resendLink": "Resend verification email",
-      "resendSent": "Verification email sent -- check your inbox.",
-      "resendFailed": "Couldn't resend right now -- try again shortly."
+      "resendSent": "Verification email sent - check your inbox.",
+      "resendFailed": "Couldn't resend right now - try again shortly."
     },
     "register": {
       "title": "Create an account",
@@ -72,7 +72,7 @@
   "community": {
     "title": "Community Patterns",
     "empty": "No patterns have been published yet.",
-    "guestNotice": "Browsing as a guest -- you can view every pattern and check off steps as you go. Want to save patterns or upload your own?",
+    "guestNotice": "Browsing as a guest - you can view every pattern and check off steps as you go. Want to save patterns or upload your own?",
     "guestNoticeUploadLink": "See how uploading works",
     "guestNoticeSignupLink": "sign up"
   },
@@ -183,7 +183,7 @@
     "translateButton": "Translate to Hebrew",
     "translating": "Translating...",
     "translateFailed": "Could not translate this pattern.",
-    "unreviewedNotice": "Machine-translated, not yet reviewed by a person -- stitch terminology may not be fully accurate."
+    "unreviewedNotice": "Machine-translated, not yet reviewed by a person - stitch terminology may not be fully accurate."
   },
   "patternCard": {
     "save": "Save",
@@ -203,7 +203,7 @@
     "deleteButton": "Delete pattern",
     "deleting": "Deleting...",
     "deleteFailed": "Could not delete this pattern.",
-    "deleteConfirm": "Permanently delete this pattern? This can't be undone -- everyone's saved progress on it will be lost too.",
+    "deleteConfirm": "Permanently delete this pattern? This can't be undone - everyone's saved progress on it will be lost too.",
     "sharedWithHeading": "Shared with",
     "noShares": "Not shared with anyone yet.",
     "removeShare": "Remove",
@@ -222,7 +222,7 @@
     "originalSiteFallback": "the original site"
   },
   "checklist": {
-    "guestNotice": "You're checking items off as a guest -- progress is saved on this device only. Log in to sync it to your account.",
+    "guestNotice": "You're checking items off as a guest - progress is saved on this device only. Log in to sync it to your account.",
     "collapseAll": "Collapse all",
     "expandAll": "Expand all",
     "noInstructions": "No instructions were extracted for this pattern."
@@ -242,7 +242,7 @@
     "permissionDenied": "You don't have permission to edit this pattern.",
     "notFound": "Pattern not found.",
     "translationHeading": "Hebrew translation",
-    "translationNotYetAvailable": "This pattern hasn't been translated to Hebrew yet -- visit the pattern's detail page to translate it, then come back here to review/correct it.",
+    "translationNotYetAvailable": "This pattern hasn't been translated to Hebrew yet - visit the pattern's detail page to translate it, then come back here to review/correct it.",
     "translationTitleLabel": "Title (Hebrew)",
     "translationMaterialsLabel": "Materials (Hebrew)",
     "translationAbbreviationsLabel": "Abbreviations (Hebrew)",
@@ -251,7 +251,7 @@
   },
   "stitchFiddle": {
     "title": "Stitch Fiddle Charts",
-    "intro": "Paste a link to one of your public Stitch Fiddle charts. Import turns it into a pattern with a reconstructed chart image and a color list -- written instructions aren't generated (that's a Stitch Fiddle premium feature), so add those yourself afterward via the pattern's Edit page if you want them.",
+    "intro": "Paste a link to one of your public Stitch Fiddle charts. Import turns it into a pattern with a reconstructed chart image and a color list - written instructions aren't generated (that's a Stitch Fiddle premium feature), so add those yourself afterward via the pattern's Edit page if you want them.",
     "urlLabel": "Stitch Fiddle chart link",
     "urlPlaceholder": "https://www.stitchfiddle.com/c/...",
     "saveButton": "Save link",
