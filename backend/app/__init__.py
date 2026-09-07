@@ -21,8 +21,8 @@ import click
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 
-from .config import get_config
-from .extensions import db, bcrypt
+from .config import INSECURE_DEFAULT_SECRET_KEY, ProdConfig, get_config
+from .extensions import db, bcrypt, limiter
 
 # backend/app/__init__.py -> up three levels is the repo root, then into
 # the frontend's Vite build output. Doesn't exist until `npm run build`
@@ -46,7 +46,8 @@ def create_app(config_overrides: dict | None = None):
     creating tables, then dropping them all at teardown.
     """
     app = Flask(__name__)
-    app.config.from_object(get_config())
+    config_class = get_config()
+    app.config.from_object(config_class)
     if config_overrides:
         app.config.update(config_overrides)
     # Flask's JSON provider alphabetizes dict keys by default, recursively
@@ -56,11 +57,30 @@ def create_app(config_overrides: dict | None = None):
     # would silently re-sort it back to alphabetical on every response,
     # discarding that order.
     app.json.sort_keys = False
+
+    # A forgotten SECRET_KEY env var in production would otherwise fall
+    # back to a hardcoded, publicly-known string -- since Flask's session
+    # cookie is signed with this key and stores nothing but {"user_id": N},
+    # that would let anyone forge a cookie and impersonate any user
+    # (including admins). Fail loudly at startup instead of silently
+    # running insecurely; config_overrides (used by tests) is exempt since
+    # it deliberately sets its own throwaway SECRET_KEY.
+    if (
+        config_class is ProdConfig
+        and not (config_overrides or {}).get("SECRET_KEY")
+        and app.config["SECRET_KEY"] == INSECURE_DEFAULT_SECRET_KEY
+    ):
+        raise RuntimeError(
+            "SECRET_KEY environment variable is not set. Refusing to start in "
+            "production with the insecure default secret key -- set a real "
+            "random value (see render.yaml)."
+        )
     # Initialize Swagger with default configurations
     swagger = Swagger(app)
 
     db.init_app(app)
     bcrypt.init_app(app)
+    limiter.init_app(app)
 
     # supports_credentials=True is required because the frontend sends the
     # session cookie on every request (credentials: 'include'); the origins
@@ -193,6 +213,36 @@ def create_app(config_overrides: dict | None = None):
             ))
             db.session.commit()
         print("Hebrew translation columns added.")
+
+    @app.cli.command("add-english-translation-columns")
+    def add_english_translation_columns():
+        """`flask --app wsgi add-english-translation-columns` -- one-off,
+        idempotent ALTER TABLE for the reverse-direction (Hebrew-primary
+        pattern -> English overlay) translation columns (Pattern.
+        title_en, materials_en, abbreviations_en, instructions_en,
+        translation_en_reviewed). Exact mirror of
+        add-hebrew-translation-columns above. Safe to re-run (IF NOT
+        EXISTS). Not needed for a brand-new database -- init-db already
+        creates the columns there."""
+        with app.app_context():
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS title_en VARCHAR(200)'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS materials_en TEXT'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS abbreviations_en TEXT'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS instructions_en JSON'
+            ))
+            db.session.execute(db.text(
+                'ALTER TABLE pattern ADD COLUMN IF NOT EXISTS translation_en_reviewed '
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+            db.session.commit()
+        print("English translation columns added.")
 
     @app.cli.command("add-email-verification-columns")
     def add_email_verification_columns():

@@ -23,7 +23,7 @@ import requests
 from flask import Blueprint, current_app, request, jsonify, session
 
 from ..email import send_verification_email
-from ..extensions import db, bcrypt
+from ..extensions import db, bcrypt, limiter
 from ..models import Notification, Pattern, User, UserPatternProgress
 from ..notifications import DEFAULTS, NOTIFICATION_TYPES
 from ..utils import get_current_user_id
@@ -32,6 +32,23 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api")
 
 # How long a /verify-email link (or a resend of one) stays valid for.
 VERIFY_TOKEN_LIFETIME = timedelta(hours=24)
+
+# Minimum password length enforced at registration. Not a full complexity
+# policy (no forced mix of character classes) -- length is the single
+# strongest lever against brute-force per NIST 800-63B guidance, and
+# complexity rules mostly just push people toward predictable patterns.
+MIN_PASSWORD_LENGTH = 8
+
+# A precomputed bcrypt hash of a value nobody will ever type (fixed, not
+# generated per-request -- generating one would need an app context and
+# defeats the point of a *cheap* constant to check against). Used only to
+# keep login()'s response time similar for a nonexistent-account attempt
+# as for a wrong-password attempt against a real one, so measuring
+# response time can't be used to tell whether an email is registered --
+# see login() below. The cost factor (12) matches bcrypt's own default,
+# which is what Flask-Bcrypt uses for real accounts absent an explicit
+# BCRYPT_LOG_ROUNDS override.
+_DUMMY_PASSWORD_HASH = "$2b$12$fc.0D/DUWMBt.YK9/Sh1D.Yp966kA6iAZZZHynTNtEdCKsYDWg6ti"
 
 
 def _issue_verify_token(user: User) -> None:
@@ -78,6 +95,7 @@ def _merge_guest_progress(user: User, guest_progress: dict) -> None:
 
 
 @auth_bp.route("/register", methods=["POST"])
+@limiter.limit("10 per hour")
 def register():
     """
     Register a new account.
@@ -115,6 +133,12 @@ def register():
             "code": "missing_fields",
         }), 400
 
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return jsonify({
+            "error": f"Password must be at least {MIN_PASSWORD_LENGTH} characters.",
+            "code": "password_too_short",
+        }), 400
+
     if User.query.filter((User.email == email) | (User.username == username)).first():
         return jsonify({
             "error": "A user with that email or username already exists",
@@ -147,6 +171,7 @@ def register():
 
 
 @auth_bp.route("/login", methods=["POST"])
+@limiter.limit("20 per hour")
 def login():
     """
     Log in with email + password.
@@ -176,7 +201,15 @@ def login():
     password = data.get("password") or ""
 
     user = User.query.filter_by(email=email).first()
-    if not user or not bcrypt.check_password_hash(user.password_hash, password):
+    # Always run a bcrypt check, even when no such user exists -- against
+    # the fixed dummy hash in that case -- so a nonexistent-account
+    # attempt takes about as long as a wrong-password attempt against a
+    # real one. Skipping the check outright when `user` is None (the
+    # previous short-circuit) made response time a reliable side-channel
+    # for enumerating registered emails.
+    password_hash = user.password_hash if user else _DUMMY_PASSWORD_HASH
+    password_ok = bcrypt.check_password_hash(password_hash, password)
+    if not user or not password_ok:
         return jsonify({"error": "Invalid email or password", "code": "invalid_credentials"}), 401
 
     if not user.email_verified:
@@ -241,6 +274,7 @@ def verify_email():
 
 
 @auth_bp.route("/resend-verification", methods=["POST"])
+@limiter.limit("5 per hour")
 def resend_verification():
     """
     Send a fresh verification link to an unverified account.
