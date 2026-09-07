@@ -267,6 +267,9 @@
   "updateBanner": {
     "changedNotice": "has changed since you last worked on it. Dismissing this will clear your old checklist progress on it."
   },
+  "unsavedChanges": {
+    "confirmLeave": "You have unsaved changes. Leave this page anyway?"
+  },
   "errors": {
     "missing_fields": "Please fill in all required fields.",
     "account_already_exists": "A user with that email or username already exists.",
