@@ -13,7 +13,9 @@ Treat every field this module returns as a suggestion, not ground truth.
 """
 
 import io
+import ipaddress
 import re
+import socket
 from urllib.parse import unquote, urljoin, urlparse
 
 import pdfplumber
@@ -88,7 +90,7 @@ class ScraperError(Exception):
     """Raised when a pattern page can't be fetched or meaningfully parsed."""
 
 
-def scrape_pattern_from_url(url: str) -> dict:
+def scrape_pattern_from_url(url: str, *, allow_file: bool = False) -> dict:
     """
     Fetch `url` and heuristically extract a pattern draft.
 
@@ -98,8 +100,14 @@ def scrape_pattern_from_url(url: str) -> dict:
     response (including sites that block automated fetching -- see
     _looks_like_bot_challenge). See parse_pattern_html for what's returned
     and how parsing failures degrade.
+
+    `allow_file` gates file:// support (see _fetch_html) -- it defaults to
+    False because this function is reachable from POST /api/patterns/preview
+    with a user-supplied URL, and file:// there would let any logged-in
+    user read arbitrary local files off the server. Only the local CLI
+    entry point at the bottom of this module passes allow_file=True.
     """
-    return parse_pattern_html(_fetch_html(url), url)
+    return parse_pattern_html(_fetch_html(url, allow_file=allow_file), url)
 def looks_like_cloudflare_challenge(page: Page) -> bool:
     title = page.title().lower()
     body_text = page.locator("body").inner_text(timeout=5_000).lower()
@@ -236,19 +244,83 @@ def parse_pattern_pdf(pdf_bytes: bytes, source_url: str) -> dict:
     }
 
 
-def _fetch_html(url: str) -> str:
+def _is_public_hostname(hostname: str) -> bool:
+    """
+    True if every address `hostname` resolves to is a normal public
+    internet address -- false for loopback (127.0.0.1, ::1), private
+    (10.x, 192.168.x, ...), link-local (169.254.x.x, including cloud
+    metadata endpoints like 169.254.169.254), and other reserved ranges.
+    A hostname that fails to resolve at all is treated as not public.
+    """
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return False
+    for info in infos:
+        addr = ipaddress.ip_address(info[4][0])
+        if (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_reserved
+            or addr.is_multicast
+            or addr.is_unspecified
+        ):
+            return False
+    return True
+
+
+def _is_request_allowed(url: str) -> bool:
+    """
+    Used by the page.route handler in _fetch_html to vet every request the
+    browser makes while rendering a page (main navigation, redirects, and
+    sub-resources alike), since a same-site redirect or DNS rebind could
+    otherwise steer the browser at an internal address after the initial
+    URL has already passed _guard_request_url. Non-network schemes
+    (data:, blob:, about:, ...) are harmless and always allowed; file: is
+    always blocked here regardless of the allow_file flag (that flag only
+    covers *this module* reading a local path directly, never the browser
+    navigating to one); http(s) requests must resolve to a public address.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme == "file":
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return True
+    return bool(parsed.hostname) and _is_public_hostname(parsed.hostname)
+
+
+def _guard_request_url(url: str) -> None:
+    """
+    Raise ScraperError unless `url` is a plain http(s) URL pointing at a
+    public address. Used as the up-front check on the URL the caller
+    actually asked to fetch, before Playwright is even launched.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ScraperError(f"Unsupported URL scheme for fetching: {parsed.scheme or url!r}")
+    if not parsed.hostname or not _is_public_hostname(parsed.hostname):
+        raise ScraperError(f"{url} points at a private or unreachable address and can't be fetched.")
+
+
+def _fetch_html(url: str, *, allow_file: bool = False) -> str:
     """
     Download the page HTML, raising ScraperError on any failure.
 
     Uses a headless browser (Playwright) to handle JavaScript-based sites
     and bot-detection challenges (e.g. Cloudflare).
 
-    Also accepts file:// URLs, which are read straight off disk instead of
-    over HTTP -- handy for testing the extraction heuristics against a
-    saved HTML snapshot (see the CLI entry point at the bottom of this
-    file, which turns a plain local path into one of these automatically).
+    When allow_file=True, also accepts file:// URLs, which are read
+    straight off disk instead of over HTTP -- handy for testing the
+    extraction heuristics against a saved HTML snapshot (see the CLI entry
+    point at the bottom of this file, which turns a plain local path into
+    one of these automatically). Defaults to False because this is
+    reachable from a user-supplied URL via POST /api/patterns/preview,
+    where file:// access would be an arbitrary local file read.
     """
     if url.startswith("file://"):
+        if not allow_file:
+            raise ScraperError("file:// URLs are not supported here.")
         # unquote is required here: Path.resolve().as_uri() (used by the
         # CLI below) percent-encodes characters like spaces (" " -> "%20")
         # per the URI spec, but urlparse() does not decode that back --
@@ -261,9 +333,17 @@ def _fetch_html(url: str) -> str:
         except OSError as exc:
             raise ScraperError(f"Could not read {path}: {exc}") from exc
 
+    _guard_request_url(url)
+
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(user_agent=USER_AGENT)
+        # Re-checked per-request (not just the initial URL above) so a
+        # redirect chain can't steer the browser at an internal address
+        # after the up-front check on the original URL already passed.
+        page.route("**/*", lambda route: (
+            route.continue_() if _is_request_allowed(route.request.url) else route.abort()
+        ))
         try:
             response = page.goto(url, timeout=30_000, wait_until="domcontentloaded")
 
@@ -679,7 +759,7 @@ if __name__ == "__main__":
             sys.exit(1)
         target = local_path.resolve().as_uri()
     try:
-        result = scrape_pattern_from_url(target)
+        result = scrape_pattern_from_url(target, allow_file=True)
     except ScraperError as exc:
         print(f"ScraperError: {exc}", file=sys.stderr)
         sys.exit(1)

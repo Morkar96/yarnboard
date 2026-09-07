@@ -39,6 +39,16 @@ def app():
     flask_app = create_app(config_overrides={
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path}",
+        # Rate limiting (see app/extensions.py's `limiter`) is disabled by
+        # default for tests: its storage is a single in-memory store
+        # shared by the one `Limiter` object across every test's Flask
+        # app (Flask-Limiter doesn't scope storage per-app), so without
+        # this, request counts would accumulate across unrelated tests in
+        # the same pytest run and eventually start 429ing tests that call
+        # login()/register() repeatedly. test_security.py re-enables it
+        # explicitly (and calls limiter.reset() first) for the tests that
+        # actually verify rate-limiting behavior.
+        "RATELIMIT_ENABLED": False,
     })
 
     with flask_app.app_context():

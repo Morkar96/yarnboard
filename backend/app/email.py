@@ -11,6 +11,7 @@ to local SQLite when unset, so local dev/testing never needs a real
 Resend account.
 """
 
+import html
 import os
 
 import requests
@@ -34,8 +35,8 @@ def send_verification_email(to_email: str, username: str, token: str) -> None:
     verify_url = f"{app_url}/verify-email?token={token}"
 
     subject = "Verify your Yarnboard email"
-    html = (
-        f"<p>Welcome to Yarnboard, <strong>{username}</strong>!</p>"
+    html_body = (
+        f"<p>Welcome to Yarnboard, <strong>{html.escape(username)}</strong>!</p>"
         f"<p>Please verify your email address to activate your account.</p>"
         f'<p><a href="{verify_url}">Verify your email</a></p>'
         f"<p>This link expires in 24 hours.</p>"
@@ -51,7 +52,7 @@ def send_verification_email(to_email: str, username: str, token: str) -> None:
     response = requests.post(
         RESEND_API_URL,
         headers={"Authorization": f"Bearer {api_key}"},
-        json={"from": from_email, "to": [to_email], "subject": subject, "html": html},
+        json={"from": from_email, "to": [to_email], "subject": subject, "html": html_body},
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
@@ -70,10 +71,16 @@ def send_pattern_updated_email(to_email: str, pattern) -> None:
     app_url = os.environ.get("PUBLIC_APP_URL", "http://localhost:5173")
     pattern_url = f"{app_url}/pattern/{pattern.id}"
 
+    # pattern.title is attacker-controlled (set by whoever uploaded the
+    # pattern, not by `to_email`'s recipient) and gets interpolated into
+    # HTML sent to a third party -- escape it (for the HTML body only;
+    # `subject` is plain text, not markup, so it's left as-is) so it can't
+    # inject markup into the notification, e.g. a fake link disguised as
+    # the pattern name.
     subject = f'"{pattern.title}" has been updated'
-    html = (
+    html_body = (
         f"<p>A pattern you've been tracking on Yarnboard, "
-        f"<strong>{pattern.title}</strong>, has just been edited.</p>"
+        f"<strong>{html.escape(pattern.title)}</strong>, has just been edited.</p>"
         f"<p>Since the instructions changed, your saved checklist progress "
         f"on it has been reset.</p>"
         f'<p><a href="{pattern_url}">View the updated pattern</a></p>'
@@ -93,7 +100,7 @@ def send_pattern_updated_email(to_email: str, pattern) -> None:
     response = requests.post(
         RESEND_API_URL,
         headers={"Authorization": f"Bearer {api_key}"},
-        json={"from": from_email, "to": [to_email], "subject": subject, "html": html},
+        json={"from": from_email, "to": [to_email], "subject": subject, "html": html_body},
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
     response.raise_for_status()

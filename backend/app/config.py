@@ -19,10 +19,13 @@ def _parse_cors_origins(raw: str) -> list[str]:
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
+INSECURE_DEFAULT_SECRET_KEY = "dev-secret-key-change-me"
+
+
 class BaseConfig:
     """Settings shared by every environment."""
 
-    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-me")
+    SECRET_KEY = os.environ.get("SECRET_KEY", INSECURE_DEFAULT_SECRET_KEY)
 
     # Neon (or any Postgres) connection string, e.g.
     # postgresql://user:password@host/dbname
