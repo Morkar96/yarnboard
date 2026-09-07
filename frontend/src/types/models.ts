@@ -61,12 +61,12 @@ export interface PatternShare {
 }
 
 /** One instructions part's Hebrew translation. Keyed in
- * HebrewTranslation.instructions by the *same* English part-name string
- * used in Pattern.instructions -- never a translated key -- because
- * checklist progress (toggleProgress) is keyed by that English part
- * name; see Pattern.instructions_he's docstring in backend/app/models.py.
- * `steps_he` is always the same length as the corresponding English
- * steps array, matched by index the same way PatternStep is. */
+ * HebrewTranslation.instructions by the *same* part-name string used in
+ * Pattern.instructions -- never a translated key -- because checklist
+ * progress (toggleProgress) is keyed by that same part name; see
+ * Pattern.instructions_he's docstring in backend/app/models.py. `steps_he`
+ * is always the same length as the corresponding primary-content steps
+ * array, matched by index the same way PatternStep is. */
 export interface HebrewInstructionEntry {
   heading_he: string;
   steps_he: string[];
@@ -82,12 +82,31 @@ export interface HebrewTranslation {
   reviewed: boolean;
 }
 
-/** null until POST /api/patterns/<id>/translate has been run at least
- * once for this pattern. Only "he" exists today -- shaped as a map keyed
- * by language so a second language could be added later without
- * reshaping this type. */
+/** The exact mirror of HebrewInstructionEntry/HebrewTranslation, for a
+ * pattern whose own primary content is Hebrew (a Hebrew-sourced pattern
+ * -- see backend/app/scraper.py's Hebrew keyword support) needing an
+ * English overlay instead. See Pattern.instructions_en's docstring in
+ * backend/app/models.py. */
+export interface EnglishInstructionEntry {
+  heading_en: string;
+  steps_en: string[];
+}
+
+export interface EnglishTranslation {
+  title: string;
+  materials: string | null;
+  abbreviations: string | null;
+  instructions: Record<string, EnglishInstructionEntry>;
+  reviewed: boolean;
+}
+
+/** he: null until POST /api/patterns/<id>/translate has been run; en:
+ * null until POST /api/patterns/<id>/translate-to-english has been run.
+ * Independent of each other -- a pattern can have either, both, or
+ * neither. */
 export interface PatternTranslations {
   he: HebrewTranslation | null;
+  en: EnglishTranslation | null;
 }
 
 export interface ChartGridPaletteEntry {
@@ -114,14 +133,16 @@ export interface PatternNotification {
  * immutable for dedup + attribution integrity, so they're not part of
  * this type at all.
  *
- * The title_he/materials_he/abbreviations_he/instructions_he fields are
- * optional and only sent when the uploader/an admin is also editing the
- * Hebrew translation in the same request -- omitting `instructions_he`
- * entirely leaves any existing translation untouched server-side (see
- * edit_pattern's docstring in backend/app/patterns/routes.py). When
- * present, instructions_he must have exactly the same keys as
- * `instructions` and each entry's steps_he the same length as its
- * English counterpart, or the backend rejects the whole request. */
+ * The title_he/materials_he/abbreviations_he/instructions_he group (and
+ * the exact mirror _en group) are optional and only sent when the
+ * uploader/an admin is also editing that translation direction in the
+ * same request -- omitting `instructions_he`/`instructions_en` entirely
+ * leaves any existing translation in that direction untouched
+ * server-side (see edit_pattern's docstring in
+ * backend/app/patterns/routes.py). When present, instructions_he/
+ * instructions_en must have exactly the same keys as `instructions` and
+ * each entry's steps_he/steps_en the same length as its primary-content
+ * counterpart, or the backend rejects the whole request. */
 export type PatternEditPayload = Pick<
   PatternDraft,
   "title" | "author" | "materials" | "abbreviations" | "instructions"
@@ -130,6 +151,10 @@ export type PatternEditPayload = Pick<
   materials_he?: string | null;
   abbreviations_he?: string | null;
   instructions_he?: Record<string, HebrewInstructionEntry>;
+  title_en?: string;
+  materials_en?: string | null;
+  abbreviations_en?: string | null;
+  instructions_en?: Record<string, EnglishInstructionEntry>;
 };
 
 /** The editable, not-yet-saved draft returned by POST /api/patterns/preview.

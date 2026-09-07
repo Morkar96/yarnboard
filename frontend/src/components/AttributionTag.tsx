@@ -19,7 +19,7 @@ export default function AttributionTag({ pattern }: { pattern: Pattern }) {
       </span>
       <span>
         {t("attribution.originalByOn")}{" "}
-        <strong className="text-body">{pattern.author || t("attribution.unknownAuthor")}</strong>{" "}
+        <strong className="text-body" dir="auto">{pattern.author || t("attribution.unknownAuthor")}</strong>{" "}
         {t("attribution.on")}{" "}
         <a
           href={pattern.original_url}

@@ -337,3 +337,202 @@ def test_glossary_file_must_be_a_flat_string_to_string_object(monkeypatch, tmp_p
 
     with pytest.raises(translation.TranslationError):
         translation._load_glossary()
+
+
+def _fake_response_error(status_code):
+    """A requests.RequestException carrying a fake `.response.status_code`
+    -- same shape as what raise_for_status() actually raises, without a
+    real HTTP round trip."""
+    return translation.requests.exceptions.RequestException(
+        f"{status_code} error", response=type("R", (), {"status_code": status_code})()
+    )
+
+
+def test_translation_retries_on_transient_server_error_then_succeeds(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(translation, "RETRY_BACKOFF_SECONDS", 0)  # don't actually sleep in tests
+    calls = {"count": 0}
+
+    def fake_post(url, params, json, timeout):
+        calls["count"] += 1
+        if calls["count"] < 3:
+            raise _fake_response_error(503)
+        return _FakeGeminiResponse(_gemini_payload(INSTRUCTIONS))
+
+    monkeypatch.setattr(translation.requests, "post", fake_post)
+
+    title_he, *_ = translation.translate_pattern_to_hebrew("Title", "Materials", "k: knit", INSTRUCTIONS)
+
+    assert title_he == "HE:title"
+    assert calls["count"] == 3  # failed twice, succeeded on the 3rd attempt
+
+
+def test_translation_gives_up_after_max_retries(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(translation, "RETRY_BACKOFF_SECONDS", 0)
+    calls = {"count": 0}
+
+    def fake_post(url, params, json, timeout):
+        calls["count"] += 1
+        raise _fake_response_error(503)
+
+    monkeypatch.setattr(translation.requests, "post", fake_post)
+
+    with pytest.raises(translation.TranslationError):
+        translation.translate_pattern_to_hebrew("Title", "Materials", "k: knit", INSTRUCTIONS)
+
+    assert calls["count"] == translation.MAX_RETRIES + 1
+
+
+def _fake_translate_en(title, materials, abbreviations, instructions):
+    """Deterministic stand-in for translation.translate_pattern_to_english
+    -- the mirror of _fake_translate above, for the reverse direction."""
+    instructions_en = {
+        part: {"heading_en": f"EN:{part}", "steps_en": [f"EN:{s}" for s in steps]}
+        for part, steps in instructions.items()
+    }
+    return f"EN:{title}", f"EN:{materials}", f"EN:{abbreviations}", instructions_en
+
+
+def test_translate_to_english_populates_english_fields_unreviewed(client, monkeypatch):
+    monkeypatch.setattr(translation, "translate_pattern_to_english", _fake_translate_en)
+    _login(client, _register(client, "owner"))
+    pattern = _submit_pattern(client)
+
+    resp = client.post(f"/api/patterns/{pattern['id']}/translate-to-english")
+    assert resp.status_code == 200
+    translated = resp.get_json()["pattern"]["translations"]["en"]
+    assert translated["title"] == "EN:Test Pattern"
+    assert translated["materials"] == "EN:Yarn"
+    assert translated["reviewed"] is False
+    assert translated["instructions"]["Part 1: Cast On"]["steps_en"] == [
+        "EN:Cast on 10.", "EN:Knit 1 row.",
+    ]
+    assert set(translated["instructions"].keys()) == set(INSTRUCTIONS.keys())
+    # Translating in one direction never touches the other.
+    assert resp.get_json()["pattern"]["translations"]["he"] is None
+
+
+def test_translate_to_english_is_noop_once_a_translation_exists(client, monkeypatch):
+    calls = []
+
+    def counting_translate(*args, **kwargs):
+        calls.append(1)
+        return _fake_translate_en(*args, **kwargs)
+
+    monkeypatch.setattr(translation, "translate_pattern_to_english", counting_translate)
+    _login(client, _register(client, "owner"))
+    pattern = _submit_pattern(client)
+
+    client.post(f"/api/patterns/{pattern['id']}/translate-to-english")
+    resp = client.post(f"/api/patterns/{pattern['id']}/translate-to-english")
+
+    assert resp.status_code == 200
+    assert len(calls) == 1
+    assert "already has an English translation" in resp.get_json()["message"]
+
+
+def test_translate_to_english_requires_login(client):
+    resp = client.post("/api/patterns/1/translate-to-english")
+    assert resp.status_code == 401
+
+
+def test_translate_to_english_surfaces_translation_error_as_502(client, monkeypatch):
+    def failing_translate(*args, **kwargs):
+        raise translation.TranslationError("GEMINI_API_KEY is not set")
+
+    monkeypatch.setattr(translation, "translate_pattern_to_english", failing_translate)
+    _login(client, _register(client, "owner"))
+    pattern = _submit_pattern(client)
+
+    resp = client.post(f"/api/patterns/{pattern['id']}/translate-to-english")
+    assert resp.status_code == 502
+    assert "GEMINI_API_KEY" in resp.get_json()["error"]
+
+
+def test_edit_with_matching_instructions_en_marks_en_reviewed(client):
+    _login(client, _register(client, "owner"))
+    pattern = _submit_pattern(client)
+
+    instructions_en = {
+        part: {"heading_en": f"EN:{part}", "steps_en": [f"EN:{s}" for s in steps]}
+        for part, steps in INSTRUCTIONS.items()
+    }
+    resp = client.patch(
+        f"/api/patterns/{pattern['id']}",
+        json={
+            "title": pattern["title"],
+            "instructions": INSTRUCTIONS,
+            "title_en": "EN:Test Pattern",
+            "instructions_en": instructions_en,
+        },
+    )
+    assert resp.status_code == 200
+    translated = resp.get_json()["pattern"]["translations"]["en"]
+    assert translated["reviewed"] is True
+    assert translated["title"] == "EN:Test Pattern"
+
+
+def test_edit_rejects_instructions_en_with_wrong_part_names(client):
+    _login(client, _register(client, "owner"))
+    pattern = _submit_pattern(client)
+
+    resp = client.patch(
+        f"/api/patterns/{pattern['id']}",
+        json={
+            "title": pattern["title"],
+            "instructions": INSTRUCTIONS,
+            "instructions_en": {"Some Other Part": {"heading_en": "x", "steps_en": ["a"]}},
+        },
+    )
+    assert resp.status_code == 400
+    assert "part names" in resp.get_json()["error"]
+
+
+def test_can_edit_hebrew_and_english_translations_independently_in_one_request(client):
+    """Both _he and _en groups are accepted in the same PATCH, and don't
+    interfere with each other -- a pattern can carry both translation
+    directions at once."""
+    _login(client, _register(client, "owner"))
+    pattern = _submit_pattern(client)
+
+    instructions_he = {
+        part: {"heading_he": f"HE:{part}", "steps_he": [f"HE:{s}" for s in steps]}
+        for part, steps in INSTRUCTIONS.items()
+    }
+    instructions_en = {
+        part: {"heading_en": f"EN:{part}", "steps_en": [f"EN:{s}" for s in steps]}
+        for part, steps in INSTRUCTIONS.items()
+    }
+    resp = client.patch(
+        f"/api/patterns/{pattern['id']}",
+        json={
+            "title": pattern["title"],
+            "instructions": INSTRUCTIONS,
+            "title_he": "HE:Test Pattern",
+            "instructions_he": instructions_he,
+            "title_en": "EN:Test Pattern",
+            "instructions_en": instructions_en,
+        },
+    )
+    assert resp.status_code == 200
+    translations = resp.get_json()["pattern"]["translations"]
+    assert translations["he"]["title"] == "HE:Test Pattern"
+    assert translations["en"]["title"] == "EN:Test Pattern"
+
+
+def test_translation_does_not_retry_a_client_error(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(translation, "RETRY_BACKOFF_SECONDS", 0)
+    calls = {"count": 0}
+
+    def fake_post(url, params, json, timeout):
+        calls["count"] += 1
+        raise _fake_response_error(400)
+
+    monkeypatch.setattr(translation.requests, "post", fake_post)
+
+    with pytest.raises(translation.TranslationError):
+        translation.translate_pattern_to_hebrew("Title", "Materials", "k: knit", INSTRUCTIONS)
+
+    assert calls["count"] == 1  # no retries for a 4xx

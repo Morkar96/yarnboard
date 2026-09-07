@@ -152,8 +152,10 @@
     "instructions": "Instructions",
     "notFound": "Pattern not found.",
     "translateButton": "Translate to Hebrew",
+    "translateToEnglishButton": "Translate to English",
     "translating": "Translating...",
     "translateFailed": "Could not translate this pattern.",
+    "translateToEnglishFailed": "Could not translate this pattern.",
     "unreviewedNotice": "Machine-translated, not yet reviewed by a person - stitch terminology may not be fully accurate."
   },
   "patternCard": {
@@ -202,12 +204,13 @@
     "saveFailed": "Could not save changes.",
     "permissionDenied": "You don't have permission to edit this pattern.",
     "notFound": "Pattern not found.",
-    "translationHeading": "Hebrew translation",
-    "translationNotYetAvailable": "This pattern hasn't been translated to Hebrew yet - visit the pattern's detail page to translate it, then come back here to review/correct it.",
-    "translationTitleLabel": "Title (Hebrew)",
-    "translationMaterialsLabel": "Materials (Hebrew)",
-    "translationAbbreviationsLabel": "Abbreviations (Hebrew)",
-    "translationInstructionsHeading": "Instructions (Hebrew)",
+    "translationHeadingHe": "Hebrew translation",
+    "translationHeadingEn": "English translation",
+    "translationNotYetAvailable": "This pattern hasn't been translated yet - visit the pattern's detail page to translate it, then come back here to review/correct it.",
+    "translationTitleLabel": "Title",
+    "translationMaterialsLabel": "Materials",
+    "translationAbbreviationsLabel": "Abbreviations",
+    "translationInstructionsHeading": "Instructions",
     "translationReviewedNotice": "Marking these fields as saved also marks the translation as reviewed."
   },
   "stitchFiddle": {

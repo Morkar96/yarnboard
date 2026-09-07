@@ -60,9 +60,23 @@ BLOCK_LEVEL_TAGS = ("p", "li", "div", "tr", "h1", "h2", "h3", "h4", "h5", "h6")
 # doesn't get misread as a new part.
 MAX_LABEL_LENGTH = 80
 
-MATERIALS_KEYWORDS = ["materials", "you will need", "you'll need", "ingredients", "supplies"]
-ABBREVIATIONS_KEYWORDS = ["abbreviation", "abbrev", "glossary", "terms", "ab"]
-INSTRUCTIONS_KEYWORDS = ["instructions", "pattern", "crochet pattern", "directions", "how to make"]
+MATERIALS_KEYWORDS = [
+    "materials", "you will need", "you'll need", "ingredients", "supplies",
+    # Hebrew: "materials", "what you'll need", "equipment", "required".
+    "חומרים", "מה תצטרכו", "ציוד", "דרוש",
+]
+ABBREVIATIONS_KEYWORDS = [
+    "abbreviation", "abbrev", "glossary", "terms", "ab",
+    # Hebrew: "abbreviations", "terms" -- "מילון מונחים" (glossary) already
+    # matches via "מונחים" as a substring, same "ab" is a substring of
+    # "abbreviation" trick the English list already relies on.
+    "קיצורים", "מונחים",
+]
+INSTRUCTIONS_KEYWORDS = [
+    "instructions", "pattern", "crochet pattern", "directions", "how to make",
+    # Hebrew: "instructions", "directions/guidelines", "how it's made".
+    "הוראות", "הנחיות", "אופן הביצוע",
+]
 
 # Matches a numbered line used as a fallback step splitter when a page has
 # no line-break markup at all, e.g. "1. Cast on 40 stitches. 2. Join...".
@@ -373,7 +387,24 @@ def _find_author_phrase(text: str) -> str | None:
         r"\b(?:designed by|pattern by|written by|by)\s+([A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]+){0,2})",
         text[:2000],
     )
-    return match.group(1).strip() if match else None
+    if match:
+        return match.group(1).strip()
+
+    # Hebrew has no letter casing, so the [A-Z] signal above -- which
+    # doubles as an implicit "this still looks like part of the name, not
+    # the next sentence" boundary -- doesn't apply. Without it, capping at
+    # 3 words (like the Latin pattern) is too greedy: get_text(" ") joins
+    # separate tags with a single space, so a name immediately followed by
+    # the next heading (e.g. "מאת דנה כהן חומרים") would swallow that
+    # heading's first word as if it were part of the name. Capped at 2
+    # words instead (first + last name, the common case) to keep that
+    # failure mode rare rather than eliminating a signal we don't have.
+    hebrew_match = re.search(
+        r"(?:מאת|עיצוב(?: של| על ידי)?|נוצר על ידי)\s*[:\-]?\s*"
+        r"([א-ת]+['׳]?(?:\s+[א-ת]+['׳]?){0,1})",
+        text[:2000],
+    )
+    return hebrew_match.group(1).strip() if hebrew_match else None
 
 
 def _is_bold(tag) -> bool:
@@ -496,16 +527,18 @@ def _classify_lines(
          contains a materials/abbreviations/instructions keyword, it starts
          that section -- even if the line isn't in `label_texts` at all.
          Most pattern pages are consistent about the *words* "Materials",
-         "Abbreviations", "Instructions"/"Directions"/"Pattern" even when
-         they're inconsistent (or entirely absent) about bolding them, so
-         keyword text is the stronger, more portable signal and is checked
-         before anything else.
+         "Abbreviations", "Instructions"/"Directions"/"Pattern" (or their
+         Hebrew equivalents -- see MATERIALS_KEYWORDS et al., which carry
+         both) even when they're inconsistent (or entirely absent) about
+         bolding them, so keyword text is the stronger, more portable
+         signal and is checked before anything else.
       2. `label_texts` membership as a fallback, used only to find *part*
          boundaries within the instructions once we're past whichever of
          the above got us there -- arbitrary part names like "Body:" or
-         "Cuff's Ribbing:" have no shared keyword vocabulary, so styling
-         (however it's represented for this format) is the only signal
-         available for those.
+         "Cuff's Ribbing:" (in any language/script) have no shared keyword
+         vocabulary, so styling (however it's represented for this format)
+         is the only signal available for those -- this step is already
+         language-agnostic, since it never inspects the label text itself.
     Lines before the first recognized section are discarded. A part is only
     kept if at least one step line was collected for it, so a heading that
     turns out to be immediately followed by another heading (e.g. a bare
