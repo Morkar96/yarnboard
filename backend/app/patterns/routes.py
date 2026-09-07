@@ -33,9 +33,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.attributes import flag_modified
 
 from .. import photo, translation
-from ..email import send_pattern_updated_email
+from ..email import send_pattern_shared_email, send_pattern_updated_email
 from ..extensions import db
 from ..models import Pattern, PatternShare, User, UserPatternProgress
+from ..notifications import create_in_app_notification, is_enabled
 from ..scraper import parse_pattern_html, parse_pattern_pdf, scrape_pattern_from_url, ScraperError
 from ..utils import get_current_user_id
 
@@ -51,7 +52,21 @@ def _require_login():
 
 
 def _can_edit(user: User, pattern: Pattern) -> bool:
-    """Admins can edit any pattern; everyone else only their own uploads."""
+    """Admins can edit any pattern; the uploader can edit their own; and
+    anyone granted an edit-level PatternShare (see share_pattern's
+    can_edit) can edit content but not manage sharing/publishing -- see
+    the individual routes below for which ones additionally restrict to
+    uploader-or-admin only."""
+    if user.is_admin or pattern.uploader_id == user.id:
+        return True
+    share = PatternShare.query.filter_by(pattern_id=pattern.id, user_id=user.id).first()
+    return bool(share and share.can_edit)
+
+
+def _can_manage(user: User, pattern: Pattern) -> bool:
+    """Publishing/unpublishing and managing who a pattern is shared with
+    is uploader-or-admin only, even for a user with an edit-level share --
+    those are ownership decisions, not content edits."""
     return user.is_admin or pattern.uploader_id == user.id
 
 
@@ -116,6 +131,21 @@ def _existing_pattern_response(url: str, uploader_id: int):
     }), 200
 
 
+def _shared_pattern_id(url: str, user_id: int) -> int | None:
+    """The id of a pattern already shared with this user for this exact
+    URL, if any -- used to warn (not block) at preview time. Deliberately
+    separate from find_duplicate/_existing_pattern_response: a pattern
+    someone else shared with you isn't "yours" by find_duplicate's rule
+    (so you're still entitled to submit your own copy), and a share can
+    be revoked at any time, so this is informational only."""
+    shared = (
+        Pattern.query.join(PatternShare, PatternShare.pattern_id == Pattern.id)
+        .filter(PatternShare.user_id == user_id, Pattern.original_url == url)
+        .first()
+    )
+    return shared.id if shared else None
+
+
 @patterns_bp.route("/preview", methods=["POST"])
 def preview_pattern():
     """
@@ -163,7 +193,12 @@ def preview_pattern():
         # "scraper_error" just tells it not to look up a translation key.
         return jsonify({"error": str(exc), "code": "scraper_error"}), 502
 
-    return jsonify({"duplicate": False, "existing_pattern_id": None, "draft": draft}), 200
+    return jsonify({
+        "duplicate": False,
+        "existing_pattern_id": None,
+        "already_shared_with_you": _shared_pattern_id(url, user_id),
+        "draft": draft,
+    }), 200
 
 
 @patterns_bp.route("/preview-upload", methods=["POST"])
@@ -243,7 +278,12 @@ def preview_pattern_from_upload():
         # fixed translation key.
         return jsonify({"error": str(exc), "code": "scraper_error"}), 502
 
-    return jsonify({"duplicate": False, "existing_pattern_id": None, "draft": draft}), 200
+    return jsonify({
+        "duplicate": False,
+        "existing_pattern_id": None,
+        "already_shared_with_you": _shared_pattern_id(url, user_id),
+        "draft": draft,
+    }), 200
 
 
 @patterns_bp.route("/submit", methods=["POST"])
@@ -429,6 +469,14 @@ def edit_pattern(pattern_id):
     pattern.materials = data.get("materials")
     pattern.abbreviations = data.get("abbreviations")
     pattern.instructions = new_instructions
+    # SQLAlchemy checks Python equality before deciding a column actually
+    # changed, and dict equality ignores key order -- reordering parts
+    # without touching their content would otherwise be silently dropped
+    # from the UPDATE (the in-memory object looks right, but the DB row
+    # never gets the new order). flag_modified forces it through
+    # regardless of whether the content is equal, same as toggle_progress
+    # below does for completed_steps.
+    flag_modified(pattern, "instructions")
     if instructions_changed:
         pattern.instructions_version += 1
 
@@ -453,33 +501,18 @@ def edit_pattern(pattern_id):
 @patterns_bp.route("/<int:pattern_id>/publish", methods=["POST"])
 def publish_pattern(pattern_id):
     """
-    Make a private pattern community-visible. One-way -- there's no
-    unpublish. Same permission rule as editing (_can_edit): the uploader
-    or an admin, never anyone a pattern was merely shared with.
+    Make a private pattern community-visible. Reversible via
+    POST /<id>/unpublish below. Same permission rule as managing sharing
+    (_can_manage): the uploader or an admin, never anyone a pattern was
+    merely shared with, even at edit level.
 
     No-ops if already public. Otherwise this is the one place a second
     public copy of the same URL gets rejected (see Pattern.find_duplicate
     -- the DB constraint alone only stops the *same* uploader from
     double-submitting, not two different uploaders each publishing their
-    own private copy of the same source).
-    ---
-    tags: [Patterns]
-    parameters:
-      - in: path
-        name: pattern_id
-        type: integer
-        required: true
-    responses:
-      200:
-        description: Pattern is now public (or already was)
-      401:
-        description: Not logged in
-      403:
-        description: Not the uploader or an admin
-      404:
-        description: No such pattern
-      409:
-        description: A different pattern from this URL is already public
+    own private copy of the same source). Unpublishing frees the URL for
+    someone else's already-submitted private copy to be published in turn
+    -- see unpublish_pattern.
     """
     user_id, error = _require_login()
     if error:
@@ -487,7 +520,7 @@ def publish_pattern(pattern_id):
 
     user = User.query.get(user_id)
     pattern = Pattern.query.get_or_404(pattern_id)
-    if not _can_edit(user, pattern):
+    if not _can_manage(user, pattern):
         return jsonify({
             "error": "You don't have permission to publish this pattern.",
             "code": "edit_forbidden",
@@ -520,6 +553,77 @@ def publish_pattern(pattern_id):
     }), 200
 
 
+@patterns_bp.route("/<int:pattern_id>/unpublish", methods=["POST"])
+def unpublish_pattern(pattern_id):
+    """
+    Reverse a previous publish, making the pattern private again. Same
+    permission rule as publish (_can_manage). No-ops if already private.
+
+    Freeing this URL is implicit, not something this route has to do
+    explicitly: publish's conflict check only ever looks at rows that are
+    *currently* public (Pattern.is_public.is_(True)), so the moment this
+    row's is_public flips False, it simply stops being the thing any
+    future publish check finds -- another uploader's own already-
+    submitted private copy of the same URL can now be published.
+    """
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    user = User.query.get(user_id)
+    pattern = Pattern.query.get_or_404(pattern_id)
+    if not _can_manage(user, pattern):
+        return jsonify({
+            "error": "You don't have permission to unpublish this pattern.",
+            "code": "edit_forbidden",
+        }), 403
+
+    if not pattern.is_public:
+        return jsonify({
+            "message": "Already private.",
+            "pattern": pattern.to_dict(current_user_id=user_id),
+        }), 200
+
+    pattern.is_public = False
+    db.session.commit()
+
+    return jsonify({
+        "message": "Pattern unpublished. It's private again.",
+        "pattern": pattern.to_dict(current_user_id=user_id),
+    }), 200
+
+
+@patterns_bp.route("/<int:pattern_id>", methods=["DELETE"])
+def delete_pattern(pattern_id):
+    """
+    Permanently delete a pattern -- uploader or an admin only
+    (_can_manage), never an edit-level share. Cascades to its
+    PatternShare grants and every UserPatternProgress row (including
+    other users' progress, not just the deleter's), and drops it from
+    everyone's saved list -- see Pattern.shares'/progress_entries'
+    cascade="all, delete-orphan" in models.py. A StitchFiddleLink that
+    previously imported this pattern has its imported_pattern_id merely
+    nulled (nullable FK, no cascade) rather than being deleted itself, so
+    the link remains and can be re-imported.
+    """
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    user = User.query.get(user_id)
+    pattern = Pattern.query.get_or_404(pattern_id)
+    if not _can_manage(user, pattern):
+        return jsonify({
+            "error": "You don't have permission to delete this pattern.",
+            "code": "edit_forbidden",
+        }), 403
+
+    db.session.delete(pattern)
+    db.session.commit()
+
+    return jsonify({"message": "Pattern deleted."}), 200
+
+
 @patterns_bp.route("/<int:pattern_id>/shares", methods=["GET"])
 def list_pattern_shares(pattern_id):
     """Everyone this pattern has been individually shared with. Same
@@ -548,7 +652,7 @@ def list_pattern_shares(pattern_id):
 
     user = User.query.get(user_id)
     pattern = Pattern.query.get_or_404(pattern_id)
-    if not _can_edit(user, pattern):
+    if not _can_manage(user, pattern):
         return jsonify({
             "error": "You don't have permission to manage this pattern's sharing.",
             "code": "edit_forbidden",
@@ -596,15 +700,17 @@ def share_pattern(pattern_id):
 
     user = User.query.get(user_id)
     pattern = Pattern.query.get_or_404(pattern_id)
-    if not _can_edit(user, pattern):
+    if not _can_manage(user, pattern):
         return jsonify({
             "error": "You don't have permission to manage this pattern's sharing.",
             "code": "edit_forbidden",
         }), 403
 
-    username = (request.get_json(silent=True) or {}).get("username", "").strip()
+    data = request.get_json(silent=True) or {}
+    username = (data.get("username") or "").strip()
     if not username:
         return jsonify({"error": "username is required", "code": "missing_fields"}), 400
+    can_edit = bool(data.get("can_edit"))
 
     target = User.query.filter_by(username=username).first()
     if not target:
@@ -622,11 +728,57 @@ def share_pattern(pattern_id):
         }), 400
 
     if not PatternShare.query.filter_by(pattern_id=pattern_id, user_id=target.id).first():
-        db.session.add(PatternShare(pattern_id=pattern_id, user_id=target.id))
+        db.session.add(PatternShare(pattern_id=pattern_id, user_id=target.id, can_edit=can_edit))
         db.session.commit()
+
+        create_in_app_notification(
+            target, "pattern_shared",
+            f"{user.username} shared \"{pattern.title}\" with you.",
+            link=f"/pattern/{pattern.id}",
+        )
+        if is_enabled(target, "pattern_shared", "email"):
+            try:
+                send_pattern_shared_email(target.email, user.username, pattern)
+            except Exception:
+                current_app.logger.exception(
+                    "Failed to send pattern-shared email to user %s for pattern %s",
+                    target.id, pattern.id,
+                )
 
     shares = PatternShare.query.filter_by(pattern_id=pattern_id).all()
     return jsonify([s.to_dict() for s in shares]), 201
+
+
+@patterns_bp.route("/<int:pattern_id>/shares/<int:share_user_id>", methods=["PATCH"])
+def update_pattern_share(pattern_id, share_user_id):
+    """Change an existing share's permission level (view <-> edit) --
+    the level isn't fixed at grant time, see PatternShare.can_edit's
+    docstring. 404s if that user doesn't currently have a share (use
+    POST .../shares to grant one in the first place)."""
+    user_id, error = _require_login()
+    if error:
+        return error
+
+    user = User.query.get(user_id)
+    pattern = Pattern.query.get_or_404(pattern_id)
+    if not _can_manage(user, pattern):
+        return jsonify({
+            "error": "You don't have permission to manage this pattern's sharing.",
+            "code": "edit_forbidden",
+        }), 403
+
+    share = PatternShare.query.filter_by(pattern_id=pattern_id, user_id=share_user_id).first()
+    if not share:
+        return jsonify({"error": "No share found for that user.", "code": "share_not_found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    if "can_edit" not in data:
+        return jsonify({"error": "can_edit is required", "code": "missing_fields"}), 400
+    share.can_edit = bool(data.get("can_edit"))
+    db.session.commit()
+
+    shares = PatternShare.query.filter_by(pattern_id=pattern_id).all()
+    return jsonify([s.to_dict() for s in shares]), 200
 
 
 @patterns_bp.route("/<int:pattern_id>/shares/<int:share_user_id>", methods=["DELETE"])
@@ -661,7 +813,7 @@ def unshare_pattern(pattern_id, share_user_id):
 
     user = User.query.get(user_id)
     pattern = Pattern.query.get_or_404(pattern_id)
-    if not _can_edit(user, pattern):
+    if not _can_manage(user, pattern):
         return jsonify({
             "error": "You don't have permission to manage this pattern's sharing.",
             "code": "edit_forbidden",
@@ -926,11 +1078,13 @@ def get_pattern_photo(pattern_id):
 
 def _notify_progress_users(pattern: Pattern, editor_user_id: int) -> None:
     """
-    Email everyone with meaningful checklist progress on `pattern` that it
-    just changed. Called after instructions_version has already been
-    bumped and committed. Best-effort per recipient -- one failed send
-    (bad address, Resend outage) is logged and skipped, never rolls back
-    the edit or blocks the remaining recipients.
+    Notify (in-app and/or email, per each recipient's own
+    notification_settings -- see notifications.py) everyone with
+    meaningful checklist progress on `pattern` that it just changed.
+    Called after instructions_version has already been bumped and
+    committed. Best-effort per recipient -- one failed email send (bad
+    address, Resend outage) is logged and skipped, never rolls back the
+    edit or blocks the remaining recipients.
     """
     progress_rows = UserPatternProgress.query.filter_by(pattern_id=pattern.id).all()
     for progress in progress_rows:
@@ -938,8 +1092,17 @@ def _notify_progress_users(pattern: Pattern, editor_user_id: int) -> None:
             continue  # no self-notification for your own edit
         if not progress.has_any_completed_step():
             continue  # stale-but-empty progress isn't real engagement
+
+        recipient = progress.user
+        create_in_app_notification(
+            recipient, "pattern_updated",
+            f"\"{pattern.title}\" has been updated -- your checklist progress on it was reset.",
+            link=f"/pattern/{pattern.id}",
+        )
+        if not is_enabled(recipient, "pattern_updated", "email"):
+            continue
         try:
-            send_pattern_updated_email(progress.user.email, pattern)
+            send_pattern_updated_email(recipient.email, pattern)
         except Exception:
             current_app.logger.exception(
                 "Failed to send pattern-updated email to user %s for pattern %s",

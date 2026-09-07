@@ -12,6 +12,7 @@
     "mySaved": "My Saved",
     "sharedWithMe": "Shared with Me",
     "stitchFiddle": "Stitch Fiddle",
+    "notificationSettings": "Notification settings",
     "greeting": "Hi, {{username}}",
     "logout": "Log out",
     "login": "Log in",
@@ -88,7 +89,31 @@
   },
   "sharedWithMe": {
     "title": "Shared with Me",
-    "empty": "Nobody has shared a pattern with you yet."
+    "empty": "Nobody has shared a pattern with you yet.",
+    "alreadySharedWarning": "Someone already shared a pattern from this URL with you. You can view that one instead, or continue and save your own copy."
+  },
+  "notifications": {
+    "bellLabel": "Notifications",
+    "inboxTitle": "Notifications",
+    "markAllRead": "Mark all read",
+    "empty": "No notifications yet."
+  },
+  "notificationSettings": {
+    "title": "Notification settings",
+    "intro": "Choose which notifications you'd like to receive, and where.",
+    "emailChannel": "Email",
+    "inAppChannel": "In-app",
+    "saveFailed": "Could not save that setting.",
+    "types": {
+      "pattern_updated": {
+        "label": "Pattern updated",
+        "description": "A pattern you have checklist progress on was edited."
+      },
+      "pattern_shared": {
+        "label": "Pattern shared with you",
+        "description": "Someone gave you access to one of their patterns."
+      }
+    }
   },
   "submit": {
     "title": "Submit a Pattern",
@@ -98,11 +123,16 @@
     "previewButton": "Preview",
     "fetching": "Fetching...",
     "genericFetchError": "Could not fetch that page. Check the URL and try again.",
-    "uploadFallbackIntro": "Couldn't fetch that page automatically - some sites block automated requests. If you have the page saved as an HTML file (open it in your browser, then \"Save Page As...\" / \"Save As\" and choose \"Webpage, HTML only\"), or the pattern as a PDF (e.g. a paid pattern from Etsy/Ravelry), you can upload it here instead. The URL above is still used to credit the original source and to avoid duplicates.",
+    "modeLink": "From a link",
+    "modeUpload": "Upload a file",
+    "uploadIntro": "Upload a saved HTML page or a PDF - useful if a site blocks automatic fetching, or if the pattern only exists as a PDF in the first place (e.g. a paid Etsy/Ravelry download). The URL is still used to credit the original source and to avoid duplicates.",
+    "uploadUrlHint": "Even though you're uploading a file, the original page's URL is still needed for attribution and to avoid duplicates.",
     "uploadFileLabel": "Saved HTML or PDF file",
     "uploadButton": "Preview from file",
     "processing": "Processing...",
     "genericUploadError": "Could not process that file.",
+    "viewSharedPattern": "View shared pattern",
+    "continueAnyway": "Continue with my own copy",
     "guestPromptLogin": "Log in",
     "guestPromptSignup": "sign up",
     "guestPromptTail": "to actually submit a pattern - uploads are tied to an account so you can edit them later.",
@@ -167,9 +197,19 @@
     "publishButton": "Publish to Community",
     "publishing": "Publishing...",
     "publishFailed": "Could not publish this pattern.",
+    "unpublishButton": "Unpublish",
+    "unpublishing": "Unpublishing...",
+    "unpublishFailed": "Could not unpublish this pattern.",
+    "unpublishConfirm": "Make this pattern private again? It will no longer be visible in the community.",
+    "deleteButton": "Delete pattern",
+    "deleting": "Deleting...",
+    "deleteFailed": "Could not delete this pattern.",
+    "deleteConfirm": "Permanently delete this pattern? This can't be undone - everyone's saved progress on it will be lost too.",
     "sharedWithHeading": "Shared with",
     "noShares": "Not shared with anyone yet.",
     "removeShare": "Remove",
+    "canEdit": "Can edit",
+    "shareAsEditor": "Allow this person to edit the pattern",
     "shareUsernamePlaceholder": "Username",
     "shareButton": "Share",
     "sharing": "Sharing...",
@@ -227,6 +267,9 @@
   },
   "updateBanner": {
     "changedNotice": "has changed since you last worked on it. Dismissing this will clear your old checklist progress on it."
+  },
+  "unsavedChanges": {
+    "confirmLeave": "You have unsaved changes. Leave this page anyway?"
   },
   "errors": {
     "missing_fields": "Please fill in all required fields.",

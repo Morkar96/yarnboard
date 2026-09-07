@@ -11,11 +11,16 @@ Tables:
     in between. `original_url` is deduplicated per-uploader always, and
     globally only among published patterns -- see
     Pattern.find_duplicate's docstring.
-  - PatternShare: an uploader-granted view-only exception for one specific
-    other user, independent of is_public.
+  - PatternShare: an uploader-granted access exception for one specific
+    other user, independent of is_public. can_edit decides whether that
+    grant is view-only or also lets them edit the pattern's content.
   - UserPatternProgress: which checklist steps a *specific* user has ticked
     off on a *specific* pattern. This is intentionally its own table rather
     than a field on Pattern -- see its docstring below for why.
+  - Notification: an in-app notification for one user, e.g. "so-and-so
+    shared a pattern with you". See User.notification_settings for the
+    per-type email/in-app toggles that gate whether one of these actually
+    gets created (see notifications.py's notify() helper).
 """
 
 from urllib.parse import urlparse
@@ -53,6 +58,15 @@ class User(db.Model):
     email_verified = db.Column(db.Boolean, nullable=False, default=False)
     email_verify_token = db.Column(db.String(64), unique=True, nullable=True)
     email_verify_token_created_at = db.Column(db.DateTime, nullable=True)
+
+    # Per-notification-type {"email": bool, "in_app": bool} toggles, e.g.
+    # {"pattern_updated": {"email": true, "in_app": true}, "pattern_shared":
+    # {"email": false, "in_app": true}}. Missing keys (an older row, or a
+    # notification type added after this user registered) default to "on"
+    # for both channels -- see notifications.py's is_enabled(), which is
+    # the only code that reads this column, so a missing/None value here
+    # never has to be special-cased anywhere else.
+    notification_settings = db.Column(db.JSON, nullable=True)
 
     # Patterns this user personally submitted (shown on "My Uploads").
     uploaded_patterns = db.relationship("Pattern", backref="uploader", lazy=True)
@@ -299,7 +313,31 @@ class Pattern(db.Model):
             "uploader_id": self.uploader_id,
             "is_public": self.is_public,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            # Computed per-viewer, same spirit as the progress merge above --
+            # lets the frontend show/hide edit controls (the Edit link,
+            # PatternVisibilityPanel) without duplicating the permission
+            # logic that already lives in patterns/routes.py's _can_edit/
+            # _can_manage. Kept in sync with those by hand (this file
+            # can't import from patterns/routes.py without a circular
+            # import) -- if either changes, update both.
+            "can_edit": self._can_edit_for(current_user_id),
+            "can_manage": self._can_manage_for(current_user_id),
         }
+
+    def _can_manage_for(self, user_id) -> bool:
+        """Mirrors patterns/routes.py's _can_manage: uploader or an admin."""
+        if user_id is None:
+            return False
+        user = User.query.get(user_id)
+        return bool(user and (user.is_admin or self.uploader_id == user.id))
+
+    def _can_edit_for(self, user_id) -> bool:
+        """Mirrors patterns/routes.py's _can_edit: uploader/admin, or an
+        edit-level PatternShare grant."""
+        if self._can_manage_for(user_id):
+            return True
+        share = PatternShare.query.filter_by(pattern_id=self.id, user_id=user_id).first()
+        return bool(share and share.can_edit)
 
 
 class UserPatternProgress(db.Model):
@@ -334,7 +372,10 @@ class UserPatternProgress(db.Model):
     )
 
     user = db.relationship("User", backref=db.backref("progress_entries", lazy=True))
-    pattern = db.relationship("Pattern", backref=db.backref("progress_entries", lazy=True))
+    pattern = db.relationship(
+        "Pattern",
+        backref=db.backref("progress_entries", lazy=True, cascade="all, delete-orphan"),
+    )
 
     __table_args__ = (
         db.UniqueConstraint("user_id", "pattern_id", name="uq_user_pattern_progress"),
@@ -399,15 +440,18 @@ class PatternShare(db.Model):
     can be private-with-three-shares, fully public (shares become moot,
     everyone can already see it, but aren't cleared), or private with none.
 
-    Grants viewing only, never editing -- _can_edit in patterns/routes.py
-    is unaffected by this table; a shared user sees the pattern and can
-    track their own checklist progress on it (same as any other viewer)
-    but can't change its content.
+    Grants viewing by default; can_edit upgrades one specific grant to also
+    let that user edit the pattern's content (_can_edit in
+    patterns/routes.py checks this in addition to uploader/admin). The
+    uploader/an admin can flip can_edit on an existing share at any time
+    via PATCH /<pattern_id>/shares/<user_id> -- a share's permission level
+    isn't fixed at grant time.
     """
 
     id = db.Column(db.Integer, primary_key=True)
     pattern_id = db.Column(db.Integer, db.ForeignKey("pattern.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    can_edit = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
 
     pattern = db.relationship(
@@ -424,5 +468,43 @@ class PatternShare(db.Model):
             "id": self.id,
             "user_id": self.user_id,
             "username": self.user.username if self.user else None,
+            "can_edit": self.can_edit,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class Notification(db.Model):
+    """
+    One in-app notification for one user (e.g. "alex shared 'Granny
+    Square' with you"). Purely a display/inbox concern -- see
+    notifications.py's notify() for the single place these get created,
+    which also handles the parallel email send, gated independently by
+    User.notification_settings per channel.
+    """
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    # A fixed, growing set of machine keys (see notifications.py's
+    # NOTIFICATION_TYPES) -- not a free-text category -- so the frontend
+    # can render a specific icon/i18n string per type rather than just
+    # dumping `message` verbatim.
+    type = db.Column(db.String(50), nullable=False)
+    message = db.Column(db.String(500), nullable=False)
+    # Where clicking this notification should take the user, e.g.
+    # "/pattern/42". Nullable since not every notification type points
+    # somewhere (kept generic rather than a pattern_id FK for that reason).
+    link = db.Column(db.String(500), nullable=True)
+    read = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+    user = db.relationship("User", backref=db.backref("notifications", lazy=True))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "type": self.type,
+            "message": self.message,
+            "link": self.link,
+            "read": self.read,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

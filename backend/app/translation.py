@@ -14,6 +14,7 @@ actively waiting on (and will persist to the database) has no reasonable
 
 import json
 import os
+import time
 from pathlib import Path
 
 import requests
@@ -36,6 +37,13 @@ GEMINI_API_URL_TEMPLATE = (
 # translation-output stability for not silently breaking down the line.
 GEMINI_MODEL = "gemini-flash-latest"
 REQUEST_TIMEOUT_SECONDS = 60
+# Gemini occasionally 503s under load (seen directly in production) --
+# retried automatically rather than failing the whole translate request
+# on a transient blip. A 4xx (bad request, invalid key, etc.) is never
+# retried -- that's not going to succeed on a second attempt, it'll just
+# make the caller wait longer to see the same error.
+MAX_RETRIES = 3
+RETRY_BACKOFF_SECONDS = 2
 
 # Schema Gemini must respond in -- one instructions entry per input part,
 # in the same order, so translate_pattern_to_hebrew can re-associate each
@@ -158,24 +166,33 @@ def translate_pattern_to_hebrew(
     )
 
     url = GEMINI_API_URL_TEMPLATE.format(model=GEMINI_MODEL)
-    try:
-        response = requests.post(
-            url,
-            params={"key": api_key},
-            json={
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "responseMimeType": "application/json",
-                    "responseSchema": _RESPONSE_SCHEMA,
+    response = None
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            response = requests.post(
+                url,
+                params={"key": api_key},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "responseMimeType": "application/json",
+                        "responseSchema": _RESPONSE_SCHEMA,
+                    },
                 },
-            },
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        raise TranslationError(
-            f"Gemini API request failed: {str(exc).replace(api_key, '<redacted>')}"
-        ) from exc
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            break
+        except requests.RequestException as exc:
+            # A 4xx won't succeed on retry (bad request, invalid key,
+            # etc.) -- fail immediately instead of burning the retry
+            # budget on something that can't change.
+            is_client_error = exc.response is not None and 400 <= exc.response.status_code < 500
+            if is_client_error or attempt == MAX_RETRIES:
+                raise TranslationError(
+                    f"Gemini API request failed: {str(exc).replace(api_key, '<redacted>')}"
+                ) from exc
+            time.sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
 
     try:
         raw_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]

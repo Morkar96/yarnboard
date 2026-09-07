@@ -35,3 +35,44 @@ export function setGuestStep(patternId: number, part: string, index: number, com
     // Best-effort only -- see module docstring.
   }
 }
+
+/**
+ * Every pattern this browser has guest progress for, keyed by pattern id
+ * (as a string, since object keys are always strings -- the backend's
+ * register() parses it back to int, see _merge_guest_progress). Used
+ * once, at registration time (RegisterPage.tsx), to hand this browser's
+ * pre-login progress off to the brand-new account so it isn't silently
+ * lost the moment someone who's been using the app as a guest signs up.
+ */
+export function getAllGuestProgress(): Record<string, Record<string, boolean[]>> {
+  const all: Record<string, Record<string, boolean[]>> = {};
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith(KEY_PREFIX)) continue;
+      const patternId = key.slice(KEY_PREFIX.length);
+      const raw = window.localStorage.getItem(key);
+      if (raw) all[patternId] = JSON.parse(raw);
+    }
+  } catch {
+    return {};
+  }
+  return all;
+}
+
+/** Clears every pattern's guest progress from localStorage -- called
+ * right after a successful register-with-merge, so a second registration
+ * later in the same browser (a different account) doesn't re-attach the
+ * first guest session's progress to it. */
+export function clearAllGuestProgress(): void {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(KEY_PREFIX)) keys.push(key);
+    }
+    keys.forEach((key) => window.localStorage.removeItem(key));
+  } catch {
+    // Best-effort only -- see module docstring.
+  }
+}

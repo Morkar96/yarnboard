@@ -1,17 +1,27 @@
 /**
- * Visibility controls shown on a pattern's detail page, but only to
- * whoever can edit it (see PatternDetailPage's canEdit) -- a private
- * pattern's uploader or an admin. Shows the current Public/Private badge,
- * a one-way "Publish to Community" action, and (while still private)
- * the list of specific users it's been individually shared with, plus a
- * form to add/remove one by username. Shares become moot once a pattern
- * is public (everyone can already see it), so that section only renders
- * while it's still private.
+ * Ownership controls shown on a pattern's detail page, only to whoever
+ * can manage it (see PatternDetailPage's pattern.can_manage) -- the
+ * uploader or an admin, never an edit-level share (see PatternShare.
+ * can_edit). Shows the current Public/Private badge, publish/unpublish
+ * (reversible either way), delete, and -- while private -- the list of
+ * specific users it's been individually shared with (each with a
+ * view/edit toggle), plus a form to add a new one by username. Shares
+ * become moot once a pattern is public (everyone can already see it), so
+ * that section only renders while it's still private.
  */
 import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Badge, Button, Card, Form } from "react-bootstrap";
 import { useTranslation } from "react-i18next";
-import { fetchPatternShares, publishPattern, sharePattern, unsharePattern } from "../api/client";
+import { useNavigate } from "react-router-dom";
+import {
+  deletePattern,
+  fetchPatternShares,
+  publishPattern,
+  sharePattern,
+  unpublishPattern,
+  unsharePattern,
+  updateSharePermission,
+} from "../api/client";
 import { useApiErrorMessage } from "../i18n/useApiErrorMessage";
 import type { Pattern, PatternShare } from "../types/models";
 import PublishConsentNotice from "./PublishConsentNotice";
@@ -23,6 +33,7 @@ interface Props {
 
 export default function PatternVisibilityPanel({ pattern, onPatternChange }: Props) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const getErrorMessage = useApiErrorMessage();
 
   const [shares, setShares] = useState<PatternShare[]>([]);
@@ -35,7 +46,11 @@ export default function PatternVisibilityPanel({ pattern, onPatternChange }: Pro
   const [acknowledged, setAcknowledged] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [unpublishing, setUnpublishing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [shareUsername, setShareUsername] = useState("");
+  const [shareCanEdit, setShareCanEdit] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
 
@@ -65,6 +80,33 @@ export default function PatternVisibilityPanel({ pattern, onPatternChange }: Pro
     }
   }
 
+  async function handleUnpublish() {
+    if (!window.confirm(t("visibility.unpublishConfirm"))) return;
+    setPublishError(null);
+    setUnpublishing(true);
+    try {
+      const result = await unpublishPattern(pattern.id);
+      onPatternChange(result.pattern);
+    } catch (err) {
+      setPublishError(getErrorMessage(err, t("visibility.unpublishFailed")));
+    } finally {
+      setUnpublishing(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(t("visibility.deleteConfirm"))) return;
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      await deletePattern(pattern.id);
+      navigate("/mine");
+    } catch (err) {
+      setDeleteError(getErrorMessage(err, t("visibility.deleteFailed")));
+      setDeleting(false);
+    }
+  }
+
   async function handleShare(e: FormEvent) {
     e.preventDefault();
     const username = shareUsername.trim();
@@ -72,8 +114,9 @@ export default function PatternVisibilityPanel({ pattern, onPatternChange }: Pro
     setShareError(null);
     setSharing(true);
     try {
-      setShares(await sharePattern(pattern.id, username));
+      setShares(await sharePattern(pattern.id, username, shareCanEdit));
       setShareUsername("");
+      setShareCanEdit(false);
     } catch (err) {
       setShareError(getErrorMessage(err, t("visibility.shareFailed")));
     } finally {
@@ -86,6 +129,10 @@ export default function PatternVisibilityPanel({ pattern, onPatternChange }: Pro
     setShares((prev) => prev.filter((s) => s.user_id !== userId));
   }
 
+  async function handleTogglePermission(userId: number, canEdit: boolean) {
+    setShares(await updateSharePermission(pattern.id, userId, canEdit));
+  }
+
   return (
     <Card className="shadow-sm mb-3">
       <Card.Body>
@@ -93,21 +140,42 @@ export default function PatternVisibilityPanel({ pattern, onPatternChange }: Pro
           <Badge bg={pattern.is_public ? "success" : "secondary"}>
             {pattern.is_public ? t("visibility.public") : t("visibility.private")}
           </Badge>
-          {!pattern.is_public && !confirming && (
-            <Button variant="primary" size="sm" onClick={() => setConfirming(true)}>
-              {t("visibility.publishButton")}
+          <div className="d-flex gap-2">
+            {!pattern.is_public && !confirming && (
+              <Button variant="primary" size="sm" onClick={() => setConfirming(true)}>
+                {t("visibility.publishButton")}
+              </Button>
+            )}
+            {pattern.is_public && (
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                disabled={unpublishing}
+                onClick={handleUnpublish}
+              >
+                {unpublishing ? t("visibility.unpublishing") : t("visibility.unpublishButton")}
+              </Button>
+            )}
+            <Button variant="outline-danger" size="sm" disabled={deleting} onClick={handleDelete}>
+              {deleting ? t("visibility.deleting") : t("visibility.deleteButton")}
             </Button>
-          )}
+          </div>
         </div>
+
+        {publishError && (
+          <Alert variant="danger" className="mt-2 mb-0 py-2">
+            {publishError}
+          </Alert>
+        )}
+        {deleteError && (
+          <Alert variant="danger" className="mt-2 mb-0 py-2">
+            {deleteError}
+          </Alert>
+        )}
 
         {confirming && (
           <div className="mt-3">
             <PublishConsentNotice acknowledged={acknowledged} onAcknowledgeChange={setAcknowledged} />
-            {publishError && (
-              <Alert variant="danger" className="mt-2 mb-2 py-2">
-                {publishError}
-              </Alert>
-            )}
             <div className="d-flex gap-2">
               <Button
                 variant="primary"
@@ -132,30 +200,48 @@ export default function PatternVisibilityPanel({ pattern, onPatternChange }: Pro
             ) : (
               <ul className="list-unstyled mb-2">
                 {shares.map((share) => (
-                  <li key={share.id} className="d-flex justify-content-between align-items-center py-1">
-                    {share.username}
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="text-danger p-0"
-                      onClick={() => handleUnshare(share.user_id)}
-                    >
-                      {t("visibility.removeShare")}
-                    </Button>
+                  <li key={share.id} className="d-flex justify-content-between align-items-center py-1 gap-2">
+                    <span>{share.username}</span>
+                    <div className="d-flex align-items-center gap-2">
+                      <Form.Check
+                        type="switch"
+                        id={`share-can-edit-${share.user_id}`}
+                        label={t("visibility.canEdit")}
+                        checked={share.can_edit}
+                        onChange={(e) => handleTogglePermission(share.user_id, e.target.checked)}
+                      />
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="text-danger p-0"
+                        onClick={() => handleUnshare(share.user_id)}
+                      >
+                        {t("visibility.removeShare")}
+                      </Button>
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
-            <Form onSubmit={handleShare} className="d-flex gap-2" style={{ maxWidth: "20rem" }}>
-              <Form.Control
-                size="sm"
-                placeholder={t("visibility.shareUsernamePlaceholder")}
-                value={shareUsername}
-                onChange={(e) => setShareUsername(e.target.value)}
+            <Form onSubmit={handleShare} className="d-flex flex-column gap-2" style={{ maxWidth: "20rem" }}>
+              <div className="d-flex gap-2">
+                <Form.Control
+                  size="sm"
+                  placeholder={t("visibility.shareUsernamePlaceholder")}
+                  value={shareUsername}
+                  onChange={(e) => setShareUsername(e.target.value)}
+                />
+                <Button type="submit" variant="outline-primary" size="sm" disabled={sharing}>
+                  {sharing ? t("visibility.sharing") : t("visibility.shareButton")}
+                </Button>
+              </div>
+              <Form.Check
+                type="checkbox"
+                id="share-new-can-edit"
+                label={t("visibility.shareAsEditor")}
+                checked={shareCanEdit}
+                onChange={(e) => setShareCanEdit(e.target.checked)}
               />
-              <Button type="submit" variant="outline-primary" size="sm" disabled={sharing}>
-                {sharing ? t("visibility.sharing") : t("visibility.shareButton")}
-              </Button>
             </Form>
             {shareError && (
               <Alert variant="danger" className="mt-2 mb-0 py-2">

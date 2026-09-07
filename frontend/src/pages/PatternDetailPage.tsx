@@ -44,7 +44,6 @@ export default function PatternDetailPage() {
   if (loading) return <Spinner animation="border" variant="primary" />;
   if (notFound || !pattern) return <p className="text-muted">{t("patternDetail.notFound")}</p>;
 
-  const canEdit = !!user && (user.is_admin || user.id === pattern.uploader_id);
   const he = i18n.language === "he" ? pattern.translations.he : null;
   const title = he?.title ?? pattern.title;
   const materials = he?.materials ?? pattern.materials;
@@ -68,7 +67,7 @@ export default function PatternDetailPage() {
     <div>
       <div className="d-flex justify-content-between align-items-start">
         <h1 className="mb-2">{title}</h1>
-        {canEdit && (
+        {pattern.can_edit && (
           <Link to={`/pattern/${pattern.id}/edit`} className="btn btn-outline-primary btn-sm">
             {t("patternDetail.edit")}
           </Link>
@@ -76,7 +75,7 @@ export default function PatternDetailPage() {
       </div>
       <AttributionTag pattern={pattern} />
 
-      {canEdit && <PatternVisibilityPanel pattern={pattern} onPatternChange={setPattern} />}
+      {pattern.can_manage && <PatternVisibilityPanel pattern={pattern} onPatternChange={setPattern} />}
 
       {pattern.chart_grid ? (
         <PatternChartGrid grid={pattern.chart_grid} />
