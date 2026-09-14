@@ -221,12 +221,13 @@ def test_preview_pattern_rejects_private_and_file_urls(client):
 
 # --- HTML injection in outbound emails ----------------------------------
 #
-# Both send_verification_email's `username` and send_pattern_updated_
-# email's `pattern.title` are attacker-controlled text (a chosen
-# username; a pattern title set by whoever uploaded it) that lands in an
-# HTML email sent to someone else. Both must be escaped before
-# interpolation, or a crafted value could inject markup -- e.g. a fake
-# link disguised as the pattern name -- into a real recipient's inbox.
+# send_verification_email's `username`, send_pattern_updated_email's
+# `pattern.title`, and send_pattern_shared_email's `sharer_username`/
+# `pattern.title` are all attacker-controlled text (a chosen username; a
+# pattern title set by whoever uploaded it) that lands in an HTML email
+# sent to someone else. All of it must be escaped before interpolation,
+# or a crafted value could inject markup -- e.g. a fake link disguised as
+# the pattern name -- into a real recipient's inbox.
 
 
 class _FakePattern:
@@ -238,7 +239,7 @@ class _FakePattern:
 def test_send_verification_email_escapes_username_in_html_body(monkeypatch):
     import app.email as email_module
 
-    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+    monkeypatch.setenv("RESEND_ONBOARDING", "test-key")
     captured = {}
 
     class _FakeResponse:
@@ -264,7 +265,7 @@ def test_send_verification_email_escapes_username_in_html_body(monkeypatch):
 def test_send_pattern_updated_email_escapes_title_in_html_body(monkeypatch):
     import app.email as email_module
 
-    monkeypatch.setenv("RESEND_API_KEY", "test-key")
+    monkeypatch.setenv("RESEND_NOTIFICATIONS", "test-key")
     captured = {}
 
     class _FakeResponse:
@@ -286,3 +287,53 @@ def test_send_pattern_updated_email_escapes_title_in_html_body(monkeypatch):
     html_body = captured["json"]["html"]
     assert payload_title not in html_body
     assert "&lt;a href=" in html_body
+
+
+def test_send_pattern_shared_email_escapes_sharer_username_and_title(monkeypatch):
+    import app.email as email_module
+
+    monkeypatch.setenv("RESEND_NOTIFICATIONS", "test-key")
+    captured = {}
+
+    class _FakeResponse:
+        def raise_for_status(self):
+            pass
+
+    def _fake_post(url, headers, json, timeout):
+        captured["json"] = json
+        return _FakeResponse()
+
+    monkeypatch.setattr(email_module.requests, "post", _fake_post)
+
+    payload_username = "<script>alert(1)</script>"
+    payload_title = '<a href="https://evil.example">Click here</a>'
+    pattern = _FakePattern(id=1, title=payload_title)
+    flask_app = create_app(config_overrides={"SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:"})
+    with flask_app.app_context():
+        email_module.send_pattern_shared_email("victim@test.com", payload_username, pattern)
+
+    html_body = captured["json"]["html"]
+    assert payload_username not in html_body
+    assert payload_title not in html_body
+    assert "&lt;script&gt;" in html_body
+    assert "&lt;a href=" in html_body
+
+
+def test_email_categories_use_independent_keys(monkeypatch):
+    """RESEND_ONBOARDING/NOTIFICATIONS are looked up independently per
+    call -- setting one shouldn't make a sender in the other category
+    send instead of logging."""
+    import app.email as email_module
+
+    monkeypatch.delenv("RESEND_ONBOARDING", raising=False)
+    monkeypatch.setenv("RESEND_NOTIFICATIONS", "test-key")
+
+    def _fail_post(*args, **kwargs):
+        raise AssertionError("should not have sent -- RESEND_ONBOARDING is unset")
+
+    monkeypatch.setattr(email_module.requests, "post", _fail_post)
+
+    flask_app = create_app(config_overrides={"SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:"})
+    with flask_app.app_context():
+        # No exception, no HTTP call -- just logs, per _deliver's fallback.
+        email_module.send_verification_email("victim@test.com", "someone", "sometoken")

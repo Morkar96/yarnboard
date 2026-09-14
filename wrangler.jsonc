@@ -1,0 +1,27 @@
+{
+  // Cloudflare Workers static-assets deployment of the built frontend
+  // only -- the API keeps running on Render (see README's "Deploying the
+  // frontend to Cloudflare" section for the full setup, including the
+  // Cloudflare-dashboard build command this repo can't configure itself,
+  // and the VITE_API_BASE_URL / CORS_ORIGINS wiring needed for the two
+  // separately-hosted origins to talk to each other).
+  //
+  // Without this file, `wrangler deploy` auto-detects settings and
+  // defaults assets.directory to the raw "frontend" source folder
+  // instead of its built "frontend/dist" output -- which serves
+  // index.html referencing /src/main.tsx (a .tsx file browsers can't
+  // execute) and renders a blank page. This file pins the real output
+  // directory so that can't happen again.
+  "name": "yarnboard",
+  "compatibility_date": "2026-09-09",
+  "assets": {
+    "directory": "frontend/dist",
+    // React Router (BrowserRouter, client-side routing) needs unmatched
+    // paths like /pattern/5 to fall back to index.html rather than
+    // 404ing on a direct load or page refresh.
+    "not_found_handling": "single-page-application"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
