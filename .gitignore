@@ -184,6 +184,21 @@ cython_debug/
 node_modules/
 frontend/dist/
 
+# Playwright e2e suite (frontend/e2e/, see Makefile's `e2e` target) --
+# generated run artifacts, plus .auth/ storageState files, which contain
+# live session cookies for the throwaway e2e fixture accounts.
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+frontend/e2e/.auth/
+
+# make e2e's captured server output (see Makefile) -- notifications.spec.ts
+# reads backend.log directly to confirm a suppressed email channel really
+# didn't attempt a send (see backend/app/email.py's log-instead-of-send
+# fallback when a RESEND_* key is unset).
+/backend.log
+/frontend.log
+
 # Local SQLite dev database (backend falls back to this when DATABASE_URL
 # isn't set). Flask-SQLAlchemy resolves relative sqlite:/// paths against
 # the app's instance folder, so the file lands in backend/instance/.

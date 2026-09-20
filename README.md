@@ -120,6 +120,37 @@ pattern page. The scraper is heuristic -- if a page doesn't extract
 cleanly, the review screen lets you fill in materials/abbreviations/steps
 by hand before publishing.
 
+## Running the e2e tests
+
+```bash
+make e2e
+```
+
+One command runs the whole thing: wipes and reseeds a throwaway
+`backend/instance/e2e.db` (see `flask --app wsgi seed-e2e` in
+`backend/app/__init__.py` for exactly what it creates -- four fixture
+users and eight patterns covering permissions, sharing, and translation
+scenarios), starts real backend/frontend dev servers on the normal
+5001/5173 ports, runs the Playwright suite (`frontend/e2e/`) against
+them, then tears everything down. It never touches your real local
+`backend/instance/yarnboard.db`, but it does use the same ports as
+`make dev` -- don't run both at once. Real Resend/Gemini calls are
+disabled for the run (see the Makefile), so email sends and translations
+are asserted against the app's own log-fallback/seeded-data behavior,
+not live third-party delivery -- that stays part of manual pre-merge QA.
+
+This repo also has Playwright's AI test agents set up
+(`npx playwright init-agents --loop=claude`, see `.claude/agents/
+playwright-test-*.md` and `frontend/.mcp.json`) for drafting/maintaining
+specs against a live running app from inside Claude Code -- the planner
+explores the app and writes a plan, the generator turns it into real
+spec files verified against the live DOM, and the healer can patch a
+spec whose selector broke after a UI change. All three need the
+`playwright-test` MCP server connected (Claude Code will prompt to
+enable it once `frontend/.mcp.json` is picked up); every generated or
+healed change should still be reviewed like any other diff before it's
+trusted.
+
 ## Deploying to Render
 
 Yarnboard deploys as a **single** Render web service (not separate
