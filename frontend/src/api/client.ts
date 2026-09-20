@@ -14,10 +14,14 @@
  * two dev servers really are on different ports.
  */
 import type {
+  AppNotification,
+  NotificationSettings,
+  NotificationType,
   Pattern,
   PatternDraft,
   PatternEditPayload,
   PatternNotification,
+  PatternShare,
   PreviewResponse,
   StitchFiddleLink,
   User,
@@ -46,9 +50,30 @@ export function resolvePhotoUrl(photoUrl: string | null): string | undefined {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /**
+   * Stable machine-readable error identifier (e.g. "invalid_credentials"),
+   * present on nearly every backend error response -- see each route's
+   * `"code"` field in each blueprint's routes.py. `message` is always the
+   * server's English text (a safe fallback and useful in error logs);
+   * `code` is what UI code should switch on to show a localized string
+   * via i18n's errors.<code> keys (see i18n/en.json / he.json). A handful
+   * of routes (scraper/translation/Stitch Fiddle failures, whose text is
+   * generated per-request rather than fixed) send a code but with no
+   * matching translation key on purpose -- callers fall back to
+   * `message` verbatim for those regardless of UI language, since
+   * there's no fixed string to translate in the first place.
+   */
+  code?: string;
+  /** Extra machine-readable context some codes carry, e.g. file_too_large's
+   * `max_mb` -- needed to interpolate a localized message correctly
+   * rather than just swapping in a fixed translated string. */
+  params?: Record<string, unknown>;
+
+  constructor(status: number, message: string, code?: string, params?: Record<string, unknown>) {
     super(message);
     this.status = status;
+    this.code = code;
+    this.params = params;
   }
 }
 
@@ -66,17 +91,31 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new ApiError(response.status, body.error || response.statusText);
+    const { error, code, ...params } = body;
+    throw new ApiError(response.status, error || response.statusText, code, params);
   }
   return body as T;
 }
 
 // --- Auth -------------------------------------------------------------
 
-export function register(username: string, email: string, password: string) {
+/** `guestProgress`, if given, is this browser's pre-login checklist
+ * progress (see utils/guestProgress.ts's getAllGuestProgress) -- merged
+ * into real UserPatternProgress rows for the new account server-side
+ * (see auth/routes.py's _merge_guest_progress). Omit it (or pass an
+ * empty object) for a plain registration with nothing to merge. */
+export function register(
+  username: string,
+  email: string,
+  password: string,
+  guestProgress?: Record<string, Record<string, boolean[]>>,
+) {
   return request<{ message: string }>("/api/register", {
     method: "POST",
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify({
+      username, email, password,
+      ...(guestProgress && Object.keys(guestProgress).length > 0 ? { guest_progress: guestProgress } : {}),
+    }),
   });
 }
 
@@ -89,6 +128,20 @@ export function login(email: string, password: string) {
 
 export function logout() {
   return request<{ message: string }>("/api/logout", { method: "POST" });
+}
+
+export function verifyEmail(token: string) {
+  return request<{ message: string }>("/api/verify-email", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+export function resendVerification(email: string) {
+  return request<{ message: string }>("/api/resend-verification", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
 }
 
 export function fetchProfile() {
@@ -180,8 +233,76 @@ export function fetchCommunityPatterns() {
   return request<Pattern[]>("/api/patterns/community");
 }
 
+/** Patterns someone else explicitly shared with the current user -- see
+ * sharePattern below. Distinct from fetchMySaved (your own bookmarks). */
+export function fetchSharedWithMe() {
+  return request<Pattern[]>("/api/patterns/shared-with-me");
+}
+
 export function fetchPattern(patternId: number) {
   return request<Pattern>(`/api/patterns/${patternId}`);
+}
+
+/** Makes a private pattern community-visible. Reversible via
+ * unpublishPattern below. 403s for anyone but the uploader/an admin (see
+ * _can_manage in patterns/routes.py); 409s if a different pattern is
+ * already public for this same original_url. */
+export function publishPattern(patternId: number) {
+  return request<{ message: string; pattern: Pattern }>(`/api/patterns/${patternId}/publish`, {
+    method: "POST",
+  });
+}
+
+/** Reverses a previous publish -- the pattern goes back to private, and
+ * its URL becomes claimable again by another uploader's already-
+ * submitted private copy. Same permission rule as publish. No-ops if
+ * already private. */
+export function unpublishPattern(patternId: number) {
+  return request<{ message: string; pattern: Pattern }>(`/api/patterns/${patternId}/unpublish`, {
+    method: "POST",
+  });
+}
+
+/** Permanently deletes a pattern -- uploader or an admin only, never an
+ * edit-level share. Cascades to its shares and everyone's checklist
+ * progress on it server-side. */
+export function deletePattern(patternId: number) {
+  return request<{ message: string }>(`/api/patterns/${patternId}`, {
+    method: "DELETE",
+  });
+}
+
+/** Everyone a private pattern has been individually shared with (see
+ * PatternShare). 403s for anyone but the uploader/an admin. */
+export function fetchPatternShares(patternId: number) {
+  return request<PatternShare[]>(`/api/patterns/${patternId}/shares`);
+}
+
+/** Grants one user (by exact username) access to a pattern that isn't
+ * public -- view-only by default, or edit access with canEdit=true.
+ * Idempotent -- sharing with someone who already has access just
+ * returns the current list unchanged (use updateSharePermission to
+ * change an existing grant's level). */
+export function sharePattern(patternId: number, username: string, canEdit = false) {
+  return request<PatternShare[]>(`/api/patterns/${patternId}/shares`, {
+    method: "POST",
+    body: JSON.stringify({ username, can_edit: canEdit }),
+  });
+}
+
+/** Changes an existing share's permission level (view <-> edit). 404s if
+ * that user doesn't currently have a share. */
+export function updateSharePermission(patternId: number, userId: number, canEdit: boolean) {
+  return request<PatternShare[]>(`/api/patterns/${patternId}/shares/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ can_edit: canEdit }),
+  });
+}
+
+export function unsharePattern(patternId: number, userId: number) {
+  return request<{ message: string }>(`/api/patterns/${patternId}/shares/${userId}`, {
+    method: "DELETE",
+  });
 }
 
 /** Edit an already-published pattern. 403s if the current user is neither
@@ -192,6 +313,32 @@ export function updatePattern(patternId: number, payload: PatternEditPayload) {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
+}
+
+/**
+ * Auto-translate this pattern to Hebrew via Gemini (see
+ * backend/app/translation.py) and persist it as an unreviewed draft.
+ * No-ops server-side (returns the pattern unchanged) if a translation
+ * already exists -- safe to call speculatively. Slow (a real LLM call),
+ * same UX category as importStitchFiddleLink -- callers should show a
+ * spinner, not treat this as instant. Any logged-in user can trigger it.
+ */
+export function translatePattern(patternId: number) {
+  return request<{ message: string; pattern: Pattern }>(
+    `/api/patterns/${patternId}/translate`,
+    { method: "POST" },
+  );
+}
+
+/** The reverse of translatePattern -- translates to English instead of
+ * Hebrew, for a pattern whose own primary content is Hebrew (see
+ * backend/app/scraper.py's Hebrew keyword support). Same no-op-if-
+ * already-translated and slow-LLM-call behavior as the Hebrew direction. */
+export function translatePatternToEnglish(patternId: number) {
+  return request<{ message: string; pattern: Pattern }>(
+    `/api/patterns/${patternId}/translate-to-english`,
+    { method: "POST" },
+  );
 }
 
 /** Patterns the current user has stale (now-outdated) checklist progress
@@ -251,4 +398,41 @@ export function importStitchFiddleLink(linkId: number) {
     `/api/stitch-fiddle/links/${linkId}/import`,
     { method: "POST" },
   );
+}
+
+// --- Notification settings + inbox ---------------------------------------
+
+/** This user's per-type email/in-app toggles -- every NotificationType key
+ * is always present, defaulting to on. */
+export function fetchNotificationSettings() {
+  return request<NotificationSettings>("/api/notification-settings");
+}
+
+/** Partial update: only the type(s)/channel(s) present in `updates` are
+ * changed, everything else is left as-is. Returns the full, freshly
+ * merged settings (same shape fetchNotificationSettings returns). */
+export function updateNotificationSettings(
+  updates: Partial<Record<NotificationType, Partial<{ email: boolean; in_app: boolean }>>>,
+) {
+  return request<NotificationSettings>("/api/notification-settings", {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+
+/** This user's in-app notification inbox, newest first. */
+export function fetchNotificationInbox() {
+  return request<AppNotification[]>("/api/notifications");
+}
+
+export function markNotificationRead(notificationId: number) {
+  return request<AppNotification>(`/api/notifications/${notificationId}/read`, {
+    method: "POST",
+  });
+}
+
+export function markAllNotificationsRead() {
+  return request<{ message: string }>("/api/notifications/read-all", {
+    method: "POST",
+  });
 }

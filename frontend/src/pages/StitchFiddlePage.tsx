@@ -10,17 +10,20 @@
  * flag. */
 import { useEffect, useState, type FormEvent } from "react";
 import { Alert, Button, Form, ListGroup, Spinner } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import {
-  ApiError,
   deleteStitchFiddleLink,
   fetchStitchFiddleLinks,
   importStitchFiddleLink,
   saveStitchFiddleLink,
 } from "../api/client";
+import { useApiErrorMessage } from "../i18n/useApiErrorMessage";
 import type { StitchFiddleLink } from "../types/models";
 
 export default function StitchFiddlePage() {
+  const { t } = useTranslation();
+  const getErrorMessage = useApiErrorMessage();
   const [links, setLinks] = useState<StitchFiddleLink[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -46,7 +49,7 @@ export default function StitchFiddlePage() {
       setLinks((prev) => (prev.some((l) => l.id === link.id) ? prev : [link, ...prev]));
       setShareUrl("");
     } catch (err) {
-      setSaveError(err instanceof ApiError ? err.message : "Could not save that link.");
+      setSaveError(getErrorMessage(err, t("stitchFiddle.saveFailed")));
     } finally {
       setSaving(false);
     }
@@ -63,7 +66,7 @@ export default function StitchFiddlePage() {
     } catch (err) {
       setRowErrors((prev) => ({
         ...prev,
-        [link.id]: err instanceof ApiError ? err.message : "Could not import this chart.",
+        [link.id]: getErrorMessage(err, t("stitchFiddle.importFailed")),
       }));
     } finally {
       setBusyLinkId(null);
@@ -84,33 +87,28 @@ export default function StitchFiddlePage() {
 
   return (
     <div>
-      <h1 className="mb-3">Stitch Fiddle Charts</h1>
-      <p className="text-muted">
-        Paste a link to one of your public Stitch Fiddle charts. Import turns it into a pattern
-        with a reconstructed chart image and a color list -- written instructions aren't
-        generated (that's a Stitch Fiddle premium feature), so add those yourself afterward via
-        the pattern's Edit page if you want them.
-      </p>
+      <h1 className="mb-3">{t("stitchFiddle.title")}</h1>
+      <p className="text-muted">{t("stitchFiddle.intro")}</p>
 
       <Form onSubmit={handleSave} className="mb-4" style={{ maxWidth: "32rem" }}>
         <Form.Group className="mb-2" controlId="stitchfiddle-url">
-          <Form.Label>Stitch Fiddle chart link</Form.Label>
+          <Form.Label>{t("stitchFiddle.urlLabel")}</Form.Label>
           <Form.Control
             type="url"
             value={shareUrl}
             onChange={(e) => setShareUrl(e.target.value)}
-            placeholder="https://www.stitchfiddle.com/c/..."
+            placeholder={t("stitchFiddle.urlPlaceholder")}
             required
           />
         </Form.Group>
         {saveError && <Alert variant="danger">{saveError}</Alert>}
         <Button type="submit" variant="primary" disabled={saving}>
-          {saving ? "Saving..." : "Save link"}
+          {saving ? t("stitchFiddle.saving") : t("stitchFiddle.saveButton")}
         </Button>
       </Form>
 
       {links.length === 0 ? (
-        <p className="text-muted">No Stitch Fiddle links saved yet.</p>
+        <p className="text-muted">{t("stitchFiddle.empty")}</p>
       ) : (
         <ListGroup>
           {links.map((link) => (
@@ -125,7 +123,7 @@ export default function StitchFiddlePage() {
                       to={`/pattern/${link.imported_pattern_id}`}
                       className="btn btn-outline-primary btn-sm"
                     >
-                      View pattern
+                      {t("stitchFiddle.viewPattern")}
                     </Link>
                   ) : (
                     <Button
@@ -134,7 +132,7 @@ export default function StitchFiddlePage() {
                       disabled={busyLinkId === link.id}
                       onClick={() => handleImport(link)}
                     >
-                      {busyLinkId === link.id ? "Importing..." : "Import"}
+                      {busyLinkId === link.id ? t("stitchFiddle.importing") : t("stitchFiddle.import")}
                     </Button>
                   )}
                   <Button
@@ -143,7 +141,7 @@ export default function StitchFiddlePage() {
                     disabled={busyLinkId === link.id}
                     onClick={() => handleRemove(link)}
                   >
-                    Remove
+                    {t("stitchFiddle.remove")}
                   </Button>
                 </div>
               </div>

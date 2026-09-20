@@ -123,6 +123,7 @@ def test_toggle_progress_then_edit_stales_progress_until_acknowledged(app, clien
     _login(client, owner_email)
     pattern = _submit_pattern(client)
     pattern_id = pattern["id"]
+    client.post(f"/api/patterns/{pattern_id}/publish")
     client.post("/api/logout")
 
     other_email = _register(client, "other")

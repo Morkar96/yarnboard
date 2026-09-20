@@ -1,10 +1,14 @@
 /**
- * The explicit "this will be public" gate shown on the review page, between
- * the editable draft form and the Publish button. Required per the product
- * spec: uploaders must be clearly told their submission is published to the
- * whole community, not just saved privately.
+ * The explicit "this will be public" gate shown when publishing a pattern
+ * to the community (see PatternVisibilityPanel), between the "Publish"
+ * button and the actual POST /<id>/publish call. Required per the product
+ * spec: uploaders must be clearly told their pattern is about to become
+ * visible to everyone, not just saved privately -- which is what
+ * submitting/importing a pattern does on its own, before this gate is
+ * ever shown.
  */
 import { Alert, Form } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   acknowledged: boolean;
@@ -12,18 +16,17 @@ interface Props {
 }
 
 export default function PublishConsentNotice({ acknowledged, onAcknowledgeChange }: Props) {
+  const { t } = useTranslation();
+
   return (
     <Alert variant="warning" className="my-4">
       <p className="mb-3">
-        <strong>Publishing to Yarnboard:</strong> this pattern will be saved to the shared
-        Yarnboard community library and visible to all users, along with your username and a
-        link back to the original source. Please only submit patterns you have the right to
-        share, and review the extracted content above for accuracy before publishing.
+        <strong>{t("publishConsent.introLead")}</strong> {t("publishConsent.intro")}
       </p>
       <Form.Check
         type="checkbox"
         id="publish-consent"
-        label="I understand this pattern will be published publicly."
+        label={t("publishConsent.checkboxLabel")}
         checked={acknowledged}
         onChange={(e) => onAcknowledgeChange(e.target.checked)}
       />
