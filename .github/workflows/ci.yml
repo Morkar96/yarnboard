@@ -68,6 +68,11 @@ jobs:
       RESEND_NOTIFICATIONS: ""
       RESEND_NEWSLETTER: ""
       GEMINI_API_KEY: ""
+      # frontend/e2e/fixtures.ts's readVerifyToken defaults to
+      # backend/.venv/bin/flask (local dev, see Makefile) -- there's no
+      # venv here, pip installs straight into the runner's system Python
+      # and `flask` ends up directly on PATH.
+      E2E_FLASK_BIN: flask
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

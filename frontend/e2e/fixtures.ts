@@ -29,6 +29,13 @@ export const PATTERNS = {
 
 const BACKEND_DIR = path.join(__dirname, "..", "..", "backend");
 
+// Locally, `flask` only exists inside backend/.venv (see Makefile's
+// install-backend); in CI, `pip install` runs straight into the runner's
+// system Python and `flask` ends up directly on PATH, with no venv at
+// all -- ci.yml sets E2E_FLASK_BIN=flask to match. Default to the venv
+// path so `make e2e` keeps working with no extra configuration.
+const FLASK_BIN = process.env.E2E_FLASK_BIN ?? path.join(BACKEND_DIR, ".venv", "bin", "flask");
+
 /**
  * Shells out to `flask --app wsgi e2e-verify-token <email>` (see
  * backend/app/__init__.py) to read a just-registered user's verification
@@ -38,7 +45,7 @@ const BACKEND_DIR = path.join(__dirname, "..", "..", "backend");
  */
 export function readVerifyToken(email: string): string | null {
   const output = execFileSync(
-    path.join(BACKEND_DIR, ".venv", "bin", "flask"),
+    FLASK_BIN,
     ["--app", "wsgi", "e2e-verify-token", email],
     {
       cwd: BACKEND_DIR,
