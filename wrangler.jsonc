@@ -12,6 +12,14 @@
   // index.html referencing /src/main.tsx (a .tsx file browsers can't
   // execute) and renders a blank page. This file pins the real output
   // directory so that can't happen again.
+  //
+  // Two stages, one Render backend: this default (unnamed) config is
+  // "prod" -- deployed from `main`, meant for the real custom domain.
+  // `env.dev` below is a second, separate Worker (own name, own
+  // workers.dev URL) deployed from `dev` via a *separate* Cloudflare
+  // project so a `dev` push can never overwrite the prod Worker. Both
+  // stages call the same Render API (see README) -- there's no separate
+  // staging backend today, so there's nothing here to override for that.
   "name": "yarnboard",
   "compatibility_date": "2026-09-09",
   "assets": {
@@ -22,6 +30,24 @@
     "not_found_handling": "single-page-application"
   },
   "observability": {
-    "enabled": true
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true
+    }
+  },
+  "env": {
+    "dev": {
+      // Distinct Worker name -> distinct workers.dev URL
+      // (yarnboard-dev.<your-subdomain>.workers.dev), so this can never
+      // collide with or overwrite the prod deployment above.
+      "name": "yarnboard-dev"
+    }
   }
 }

@@ -220,34 +220,57 @@ domain), while the API keeps running on Render as normal -- this makes
 them **different origins**, which needs a bit more wiring than the
 same-origin combined setup.
 
+Two stages, **two separate Cloudflare projects**, one shared Render
+backend (there's no separate staging API today -- both stages call the
+same one):
+
+|                    | **prod**                          | **dev**                                    |
+| ------------------ | ---------------------------------- | ------------------------------------------- |
+| Git branch         | `main`                             | `dev`                                       |
+| Worker name         | `yarnboard` (`wrangler.jsonc`'s default/unnamed config) | `yarnboard-dev` (`wrangler.jsonc`'s `env.dev`) |
+| Deploy command      | `npx wrangler deploy --env=""`     | `npx wrangler deploy --env dev`             |
+| Served at           | your custom domain                 | the auto-generated `yarnboard-dev.<your-subdomain>.workers.dev` |
+| `VITE_API_BASE_URL` | the Render backend's URL           | same Render backend's URL                   |
+
+A single project can't safely cover both: Cloudflare's git integration
+deploys whatever branch triggers a build to the Worker name in
+`wrangler.jsonc`, so without the separate `env.dev`/`--env dev` config
+above, a `dev` push would silently overwrite the live prod Worker.
+
 1. Deploy the backend to Render as above (or point at an existing
    deployment) -- note its URL, e.g. `https://yarnboard.onrender.com`.
-2. On the Render service, set `CORS_ORIGINS` (see `render.yaml`) to the
-   Cloudflare domain(s) the frontend will actually be served from
-   (comma-separated if more than one, e.g. your custom domain plus the
-   `*.workers.dev` preview URL). `SESSION_COOKIE_SAMESITE=None` is
-   already handled for you in production (see `backend/app/config.py`),
-   which is what lets the session cookie survive this cross-origin setup
-   at all.
-3. In the Cloudflare dashboard, create a Workers project connected to
-   this repo. This repo's root `wrangler.jsonc` already points
-   `assets.directory` at `frontend/dist` (Wrangler defaults to the raw,
-   unbuilt `frontend` folder without it, which serves a blank page --
-   `index.html` references `/src/main.tsx`, a `.tsx` file browsers can't
-   execute). What's *not* in a repo file, and needs setting in the
-   Cloudflare project's build settings:
-   - **Build command**: `cd frontend && npm install && npm run build` --
-     without this, `frontend/dist` doesn't exist at deploy time either
-     (same blank-page symptom).
-   - **Deploy command**: `npx wrangler deploy` (Cloudflare's default).
-   - **Build variable** `VITE_API_BASE_URL`: the Render backend's URL from
-     step 1. Vite bakes this in at build time (see
-     `frontend/src/api/client.ts`) -- without it, the built frontend falls
-     back to relative `/api/...` paths, which resolve against the
-     Cloudflare domain itself (no API there) instead of Render.
-4. Add your custom domain to the Workers project (Cloudflare dashboard --
-   Workers project -- Custom Domains) if you're not just using the
-   `*.workers.dev` URL.
+2. On the Render service, set `CORS_ORIGINS` (see `render.yaml`) to
+   **both** frontend origins, comma-separated: your prod custom domain
+   and the `yarnboard-dev.*.workers.dev` URL. `SESSION_COOKIE_SAMESITE=
+   None` is already handled for you in production (see
+   `backend/app/config.py`), which is what lets the session cookie
+   survive this cross-origin setup at all.
+3. In the Cloudflare dashboard, create **two** Workers projects
+   connected to this repo -- one tracking `main`, one tracking `dev`.
+   This repo's root `wrangler.jsonc` already defines both Worker configs
+   (default = prod, `env.dev` = dev), and already points
+   `assets.directory` at `frontend/dist` for both (Wrangler defaults to
+   the raw, unbuilt `frontend` folder without it, which serves a blank
+   page -- `index.html` references `/src/main.tsx`, a `.tsx` file
+   browsers can't execute). What's *not* in a repo file, and needs
+   setting per-project in Cloudflare's build settings (see the table
+   above for the two values that actually differ):
+   - **Build command** (both projects): `cd frontend && npm install &&
+     npm run build` -- without this, `frontend/dist` doesn't exist at
+     deploy time either (same blank-page symptom).
+   - **Deploy command**: `npx wrangler deploy --env=""` for the prod
+     project, `npx wrangler deploy --env dev` for the dev project (the
+     explicit `--env` is required once `wrangler.jsonc` defines more than
+     one environment -- Wrangler refuses to guess which one you meant).
+   - **Build variable** `VITE_API_BASE_URL` (both projects, same value):
+     the Render backend's URL from step 1. Vite bakes this in at build
+     time (see `frontend/src/api/client.ts`) -- without it, the built
+     frontend falls back to relative `/api/...` paths, which resolve
+     against the Cloudflare domain itself (no API there) instead of
+     Render.
+4. Add your custom domain to the **prod** project only (Cloudflare
+   dashboard -> Workers project -> Custom Domains). Leave the dev project
+   on its `*.workers.dev` URL.
 
 ## Known limitations
 
