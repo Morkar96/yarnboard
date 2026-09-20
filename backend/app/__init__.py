@@ -353,6 +353,182 @@ def create_app(config_overrides: dict | None = None):
             db.session.commit()
             print(f"{user.username} ({email}) is now an admin.")
 
+    @app.cli.command("seed-e2e")
+    def seed_e2e():
+        """`flask --app wsgi seed-e2e` -- wipe and recreate the database
+        (whatever DATABASE_URL currently points at -- meant to be run only
+        against a throwaway e2e DB, never a real one) with a fixed set of
+        users/patterns the Playwright e2e suite (frontend/e2e/) references
+        by exact username/title. Bypasses register()/scraping/Gemini
+        entirely (direct model inserts) so seeding never depends on those
+        services being reachable. Safe to re-run -- always starts from a
+        clean slate."""
+        from .models import Pattern, PatternShare, User
+
+        with app.app_context():
+            db.drop_all()
+            db.create_all()
+
+            def make_user(username, email, is_admin=False, notification_settings=None):
+                user = User(
+                    username=username,
+                    email=email,
+                    password_hash=bcrypt.generate_password_hash("password123").decode("utf-8"),
+                    email_verified=True,
+                    is_admin=is_admin,
+                    notification_settings=notification_settings,
+                )
+                db.session.add(user)
+                return user
+
+            admin = make_user("e2e_admin", "admin@e2e.test", is_admin=True)
+            alice = make_user("e2e_alice", "alice@e2e.test")
+            bob = make_user("e2e_bob", "bob@e2e.test")
+            # email off, in_app on for pattern_shared -- e2e_carol is the
+            # fixture notifications.spec.ts uses to assert a disabled email
+            # channel actually suppresses the send while in-app still fires.
+            carol = make_user(
+                "e2e_carol", "carol@e2e.test",
+                notification_settings={"pattern_shared": {"email": False, "in_app": True}},
+            )
+            db.session.flush()
+
+            instructions = {"Part 1: Cast On": ["Cast on 20 stitches.", "Knit 2 rows."]}
+
+            english_pattern = Pattern(
+                original_url="https://example.test/e2e-english-pattern",
+                title="E2E English Pattern",
+                materials="4mm needles, worsted weight yarn",
+                abbreviations="k: knit, p: purl",
+                instructions=instructions,
+                uploader_id=alice.id,
+                is_public=True,
+                title_he="תבנית לדוגמה באנגלית",
+                materials_he="מסרגות 4 מ״מ, חוט עבה",
+                abbreviations_he="k: קשירה, p: פרל",
+                instructions_he={
+                    "Part 1: Cast On": {
+                        "heading_he": "חלק 1: הטלת עיניים",
+                        "steps_he": ["הטל 20 עיניים.", "סרוג 2 שורות."],
+                    }
+                },
+                translation_reviewed=True,
+            )
+
+            hebrew_pattern = Pattern(
+                original_url="https://example.test/e2e-hebrew-pattern",
+                title="תבנית עברית לבדיקה",
+                materials="מסרגות 5 מ״מ",
+                abbreviations="ע: עין",
+                instructions=instructions,
+                uploader_id=alice.id,
+                is_public=True,
+                title_en="E2E Hebrew Pattern",
+                materials_en="5mm needles",
+                abbreviations_en="st: stitch",
+                instructions_en={
+                    "Part 1: Cast On": {
+                        "heading_en": "Part 1: Cast On",
+                        "steps_en": ["Cast on 20 stitches.", "Knit 2 rows."],
+                    }
+                },
+                translation_en_reviewed=True,
+            )
+
+            private_shared_pattern = Pattern(
+                original_url="https://example.test/e2e-private-shared-pattern",
+                title="E2E Private Shared Pattern",
+                materials="Test materials",
+                instructions=instructions,
+                uploader_id=alice.id,
+                is_public=False,
+            )
+
+            editable_shared_pattern = Pattern(
+                original_url="https://example.test/e2e-editable-shared-pattern",
+                title="E2E Editable Shared Pattern",
+                materials="Test materials",
+                instructions=instructions,
+                uploader_id=alice.id,
+                is_public=False,
+            )
+
+            permissions_pattern = Pattern(
+                original_url="https://example.test/e2e-permissions-pattern",
+                title="E2E Permissions Pattern",
+                materials="Test materials",
+                instructions=instructions,
+                uploader_id=bob.id,
+                is_public=True,
+            )
+
+            # Dedicated to the publish/unpublish test in sharing.spec.ts --
+            # kept separate from private_shared_pattern/editable_shared_pattern
+            # (which sharing.spec.ts's share/unshare tests mutate) so toggling
+            # visibility here can never affect another test's fixture state.
+            unpublished_pattern = Pattern(
+                original_url="https://example.test/e2e-unpublished-pattern",
+                title="E2E Unpublished Pattern",
+                materials="Test materials",
+                instructions=instructions,
+                uploader_id=alice.id,
+                is_public=False,
+            )
+
+            # Dedicated to notifications.spec.ts's share-triggered
+            # in-app-notification tests -- kept separate from every other
+            # private pattern above so sharing them with bob/carol there
+            # can never change the share list another spec (sharing.spec.ts)
+            # asserts against.
+            notification_pattern_one = Pattern(
+                original_url="https://example.test/e2e-notification-pattern-one",
+                title="E2E Notification Pattern One",
+                materials="Test materials",
+                instructions=instructions,
+                uploader_id=alice.id,
+                is_public=False,
+            )
+            notification_pattern_two = Pattern(
+                original_url="https://example.test/e2e-notification-pattern-two",
+                title="E2E Notification Pattern Two",
+                materials="Test materials",
+                instructions=instructions,
+                uploader_id=alice.id,
+                is_public=False,
+            )
+
+            db.session.add_all([
+                english_pattern, hebrew_pattern, private_shared_pattern,
+                editable_shared_pattern, permissions_pattern, unpublished_pattern,
+                notification_pattern_one, notification_pattern_two,
+            ])
+            db.session.flush()
+
+            db.session.add(PatternShare(pattern_id=private_shared_pattern.id, user_id=bob.id, can_edit=False))
+            db.session.add(PatternShare(pattern_id=editable_shared_pattern.id, user_id=bob.id, can_edit=True))
+
+            db.session.commit()
+            print(
+                f"Seeded e2e database: users [{admin.username}, {alice.username}, "
+                f"{bob.username}, {carol.username}], 8 patterns."
+            )
+
+    @app.cli.command("e2e-verify-token")
+    @click.argument("email")
+    def e2e_verify_token(email):
+        """`flask --app wsgi e2e-verify-token <email>` -- print that user's
+        current email_verify_token, for the Playwright e2e suite to verify
+        a freshly-registered account without needing real email delivery
+        (real Resend keys are deliberately out of scope for e2e -- see
+        frontend/e2e/). Prints nothing (exit 0) if the user doesn't exist
+        or has no pending token."""
+        from .models import User
+
+        with app.app_context():
+            user = User.query.filter_by(email=email.strip().lower()).first()
+            if user and user.email_verify_token:
+                print(user.email_verify_token)
+
     @app.route("/api/health")
     def health():
         return {"status": "ok"}

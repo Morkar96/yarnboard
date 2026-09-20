@@ -10,7 +10,8 @@
 .PHONY: install install-backend install-frontend \
         dev dev-backend dev-frontend down \
         test test-backend test-frontend \
-        build build-check
+        build build-check \
+        e2e
 
 install: install-backend install-frontend
 
@@ -63,3 +64,34 @@ build: build-check
 
 build-check:
 	cd backend && pip install -r requirements.txt && cd ../frontend && npm install && npm run build
+
+# Playwright e2e suite (frontend/e2e/). Runs against a throwaway SQLite
+# file (backend/instance/e2e.db) that's always wiped and reseeded first,
+# so this never touches the real local dev DB -- and against real dev
+# servers on the normal 5001/5173 ports, so don't run this at the same
+# time as `make dev`. RATELIMIT_ENABLED is deliberately left at its
+# default (on) -- e2e/z-rate-limit.spec.ts needs it. RESEND_*/GEMINI_API_KEY
+# are explicitly blanked, not just left unset -- wsgi.py's load_dotenv()
+# would otherwise pull real keys from backend/.env (python-dotenv never
+# overrides a var already present in the environment, even an empty one),
+# which would make notifications.spec.ts's "no email attempt" assertion
+# depend on real Resend delivery instead of the deterministic log
+# fallback in backend/app/email.py. backend.log is what that spec reads
+# to confirm a disabled email channel really didn't attempt a send.
+e2e:
+	@rm -f backend/instance/e2e.db backend.log frontend.log
+	@cd backend && DATABASE_URL=sqlite:///e2e.db FLASK_ENV=development \
+	    RESEND_ONBOARDING= RESEND_NOTIFICATIONS= RESEND_NEWSLETTER= GEMINI_API_KEY= \
+	    .venv/bin/flask --app wsgi seed-e2e
+	@trap 'kill 0' EXIT INT TERM; \
+	( cd backend && DATABASE_URL=sqlite:///e2e.db FLASK_ENV=development CORS_ORIGINS=http://localhost:5173 \
+	    RESEND_ONBOARDING= RESEND_NOTIFICATIONS= RESEND_NEWSLETTER= GEMINI_API_KEY= \
+	    .venv/bin/flask --app wsgi run --port 5001 > ../backend.log 2>&1 & ) ; \
+	( cd frontend && VITE_API_BASE_URL=http://localhost:5001 npm run dev > ../frontend.log 2>&1 & ) ; \
+	echo "Waiting for backend/frontend..."; \
+	for i in $$(seq 1 30); do curl -sf http://localhost:5001/api/health > /dev/null && break; sleep 1; done; \
+	for i in $$(seq 1 30); do curl -sf http://localhost:5173/ > /dev/null && break; sleep 1; done; \
+	cd frontend && npm run test:e2e; \
+	status=$$?; \
+	lsof -ti :5001 -ti :5173 | xargs kill 2>/dev/null; \
+	exit $$status
