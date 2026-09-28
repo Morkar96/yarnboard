@@ -39,9 +39,89 @@ export interface Pattern {
    * null for every other pattern. `cells` is row-major, one 0-indexed
    * `palette` lookup per cell (see PatternChartGrid.tsx). */
   chart_grid: ChartGrid | null;
+  translations: PatternTranslations;
   uploader: string;
   uploader_id: number;
+  /** Private (false, the default for a new pattern) until the uploader
+   * explicitly publishes it -- see POST /api/patterns/<id>/publish. A
+   * private pattern may still be visible to specific other users via
+   * PatternShare (see the shares endpoints in client.ts) without being
+   * public to everyone. */
+  is_public: boolean;
   created_at: string | null;
+  /** Computed by the backend for the current viewer (see Pattern.to_dict
+   * in models.py) -- true for the uploader, an admin, or a user with an
+   * edit-level PatternShare. Drives whether the Edit link/page and
+   * checklist-instructions edits are available; doesn't include managing
+   * sharing/publishing/deletion, see can_manage for that. */
+  can_edit: boolean;
+  /** True only for the uploader or an admin -- gates
+   * PatternVisibilityPanel (publish/unpublish/delete/manage shares),
+   * which an edit-level share can't do even though can_edit is true for
+   * them. */
+  can_manage: boolean;
+}
+
+/** One user a pattern has been individually shared with (see POST/GET/
+ * PATCH/DELETE /api/patterns/<id>/shares) -- independent of
+ * Pattern.is_public. can_edit decides whether this grant is view-only or
+ * also lets that user edit the pattern's content; changeable anytime via
+ * updateSharePermission, not fixed at grant time. */
+export interface PatternShare {
+  id: number;
+  user_id: number;
+  username: string;
+  can_edit: boolean;
+  created_at: string | null;
+}
+
+/** One instructions part's Hebrew translation. Keyed in
+ * HebrewTranslation.instructions by the *same* part-name string used in
+ * Pattern.instructions -- never a translated key -- because checklist
+ * progress (toggleProgress) is keyed by that same part name; see
+ * Pattern.instructions_he's docstring in backend/app/models.py. `steps_he`
+ * is always the same length as the corresponding primary-content steps
+ * array, matched by index the same way PatternStep is. */
+export interface HebrewInstructionEntry {
+  heading_he: string;
+  steps_he: string[];
+}
+
+export interface HebrewTranslation {
+  title: string;
+  materials: string | null;
+  abbreviations: string | null;
+  instructions: Record<string, HebrewInstructionEntry>;
+  /** False until a human (uploader or admin) has confirmed the
+   * auto-translation via an edit -- see PATCH /api/patterns/<id>. */
+  reviewed: boolean;
+}
+
+/** The exact mirror of HebrewInstructionEntry/HebrewTranslation, for a
+ * pattern whose own primary content is Hebrew (a Hebrew-sourced pattern
+ * -- see backend/app/scraper.py's Hebrew keyword support) needing an
+ * English overlay instead. See Pattern.instructions_en's docstring in
+ * backend/app/models.py. */
+export interface EnglishInstructionEntry {
+  heading_en: string;
+  steps_en: string[];
+}
+
+export interface EnglishTranslation {
+  title: string;
+  materials: string | null;
+  abbreviations: string | null;
+  instructions: Record<string, EnglishInstructionEntry>;
+  reviewed: boolean;
+}
+
+/** he: null until POST /api/patterns/<id>/translate has been run; en:
+ * null until POST /api/patterns/<id>/translate-to-english has been run.
+ * Independent of each other -- a pattern can have either, both, or
+ * neither. */
+export interface PatternTranslations {
+  he: HebrewTranslation | null;
+  en: EnglishTranslation | null;
 }
 
 export interface ChartGridPaletteEntry {
@@ -66,11 +146,31 @@ export interface PatternNotification {
 /** Fields editable on an already-published pattern (see PATCH
  * /api/patterns/<id>). original_url/source_site_name/source_domain stay
  * immutable for dedup + attribution integrity, so they're not part of
- * this type at all. */
+ * this type at all.
+ *
+ * The title_he/materials_he/abbreviations_he/instructions_he group (and
+ * the exact mirror _en group) are optional and only sent when the
+ * uploader/an admin is also editing that translation direction in the
+ * same request -- omitting `instructions_he`/`instructions_en` entirely
+ * leaves any existing translation in that direction untouched
+ * server-side (see edit_pattern's docstring in
+ * backend/app/patterns/routes.py). When present, instructions_he/
+ * instructions_en must have exactly the same keys as `instructions` and
+ * each entry's steps_he/steps_en the same length as its primary-content
+ * counterpart, or the backend rejects the whole request. */
 export type PatternEditPayload = Pick<
   PatternDraft,
   "title" | "author" | "materials" | "abbreviations" | "instructions"
->;
+> & {
+  title_he?: string;
+  materials_he?: string | null;
+  abbreviations_he?: string | null;
+  instructions_he?: Record<string, HebrewInstructionEntry>;
+  title_en?: string;
+  materials_en?: string | null;
+  abbreviations_en?: string | null;
+  instructions_en?: Record<string, EnglishInstructionEntry>;
+};
 
 /** The editable, not-yet-saved draft returned by POST /api/patterns/preview.
  * Instructions here are plain strings (no per-user completed flag yet --
@@ -91,7 +191,35 @@ export interface PatternDraft {
 export interface PreviewResponse {
   duplicate: boolean;
   existing_pattern_id: number | null;
+  /** Set when this exact URL is already a pattern someone else shared
+   * with you -- informational only, doesn't block submitting your own
+   * copy (a share can be revoked at any time, and you're entitled to
+   * your own copy regardless). See _shared_pattern_id in
+   * backend/app/patterns/routes.py. */
+  already_shared_with_you: number | null;
   draft: PatternDraft | null;
+}
+
+/** One notification type this app knows about -- must match
+ * notifications.NOTIFICATION_TYPES in the backend. */
+export type NotificationType = "pattern_updated" | "pattern_shared";
+
+export type NotificationChannelSettings = { email: boolean; in_app: boolean };
+
+/** This user's per-type email/in-app toggles (see GET/PATCH
+ * /api/notification-settings) -- every NotificationType key is always
+ * present, defaulting to {email: true, in_app: true}. */
+export type NotificationSettings = Record<NotificationType, NotificationChannelSettings>;
+
+/** One in-app notification (see GET /api/notifications). `link`, when
+ * present, is an in-app path (e.g. "/pattern/42") to navigate to on click. */
+export interface AppNotification {
+  id: number;
+  type: NotificationType;
+  message: string;
+  link: string | null;
+  read: boolean;
+  created_at: string | null;
 }
 
 /** A saved Stitch Fiddle (stitchfiddle.com) chart share link -- private to

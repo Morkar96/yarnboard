@@ -92,6 +92,27 @@
   box-shadow: 0 0 0 0.25rem rgba(var(--yb-eggplant-rgb), 0.25);
 }
 
+/* Bootstrap's .btn-light normally resolves to a generic gray, and since
+   the navbar sets data-bs-theme="dark" (see .navbar-eggplant below),
+   nothing here guarantees it stays a light background with dark text --
+   pinned explicitly to this app's own light-surface tokens, across every
+   state, so the Sign Up button (the only .btn-light in the app) always
+   reads as light-on-dark regardless of the dark navbar around it. */
+.btn-light {
+  --bs-btn-color: var(--yb-text);
+  --bs-btn-bg: var(--yb-surface);
+  --bs-btn-border-color: var(--yb-border);
+  --bs-btn-hover-color: var(--yb-text);
+  --bs-btn-hover-bg: var(--yb-bg);
+  --bs-btn-hover-border-color: var(--yb-border);
+  --bs-btn-active-color: var(--yb-text);
+  --bs-btn-active-bg: var(--yb-bg);
+  --bs-btn-active-border-color: var(--yb-border);
+  --bs-btn-disabled-color: var(--yb-text);
+  --bs-btn-disabled-bg: var(--yb-surface);
+  --bs-btn-disabled-border-color: var(--yb-border);
+}
+
 /* Solid eggplant navbar. Paired with data-bs-theme="dark" on the <Navbar>
    element itself (see NavBar.tsx) so Bootstrap's own light-on-dark
    nav-link colors apply automatically instead of needing per-link

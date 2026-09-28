@@ -30,6 +30,7 @@ const instructions: InstructionsMap = {
 
 beforeEach(() => {
   mockAuth(loggedInUser);
+  window.localStorage.clear();
 });
 
 describe("PatternChecklist", () => {
@@ -55,12 +56,37 @@ describe("PatternChecklist", () => {
     await waitFor(() => expect(checkbox).not.toBeChecked());
   });
 
-  it("disables checkboxes and prompts login for anonymous viewers", () => {
+  it("lets anonymous viewers check steps too, cached locally instead of via the API", () => {
     mockAuth(null);
+    // vi.spyOn re-wraps whatever's currently exported -- since earlier
+    // tests in this file already replaced toggleProgress with their own
+    // mocks (never restored), the returned spy shares call history with
+    // those; clear it so this assertion only reflects this test's clicks.
+    const toggleSpy = vi.spyOn(api, "toggleProgress");
+    toggleSpy.mockClear();
     render(<PatternChecklist patternId={5} instructions={instructions} />);
 
-    expect(screen.getByLabelText("Cast on 10.")).toBeDisabled();
-    expect(screen.getByText(/log in to track your progress/i)).toBeInTheDocument();
+    expect(screen.getByText(/checking items off as a guest/i)).toBeInTheDocument();
+
+    const checkbox = screen.getByLabelText("Cast on 10.");
+    expect(checkbox).not.toBeDisabled();
+    fireEvent.click(checkbox);
+
+    expect(checkbox).toBeChecked();
+    expect(toggleSpy).not.toHaveBeenCalled();
+    expect(JSON.parse(window.localStorage.getItem("yarnboard:guest-progress:5")!)).toEqual({
+      "Part 1": [true],
+    });
+  });
+
+  it("restores a guest's cached progress on a later render of the same pattern", () => {
+    mockAuth(null);
+    window.localStorage.setItem("yarnboard:guest-progress:5", JSON.stringify({ "Part 1": [true] }));
+
+    render(<PatternChecklist patternId={5} instructions={instructions} />);
+
+    expect(screen.getByLabelText("Cast on 10.")).toBeChecked();
+    expect(screen.getByLabelText("Knit 5 rows.")).not.toBeChecked();
   });
 
   it("collapses and expands a part's steps when its header is clicked", () => {
