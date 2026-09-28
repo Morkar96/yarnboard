@@ -38,7 +38,11 @@ export default function NotificationBell() {
     const poll = () => {
       fetchNotificationInbox()
         .then((result) => {
-          if (!cancelled) setNotifications(result);
+          // Guards against a misbehaving backend/proxy returning a non-array
+          // body (e.g. an SPA fallback page instead of real JSON) -- without
+          // this, a shape mismatch here crashes the whole navbar at the
+          // .filter() below instead of just skipping this poll.
+          if (!cancelled && Array.isArray(result)) setNotifications(result);
         })
         .catch(() => {
           // Transient failure -- just try again next interval.
