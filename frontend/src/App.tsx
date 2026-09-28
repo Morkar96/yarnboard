@@ -1,22 +1,18 @@
 import { Container } from "react-bootstrap";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import NavBar from "./components/NavBar";
 import ProtectedRoute from "./components/ProtectedRoute";
 import UpdateBanner from "./components/UpdateBanner";
 import CommunityPage from "./pages/CommunityPage";
 import EditPatternPage from "./pages/EditPatternPage";
-import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import MySavedPage from "./pages/MySavedPage";
 import MyUploadsPage from "./pages/MyUploadsPage";
-import NotificationSettingsPage from "./pages/NotificationSettingsPage";
 import PatternDetailPage from "./pages/PatternDetailPage";
 import RegisterPage from "./pages/RegisterPage";
 import ReviewPatternPage from "./pages/ReviewPatternPage";
-import SharedWithMePage from "./pages/SharedWithMePage";
 import StitchFiddlePage from "./pages/StitchFiddlePage";
 import SubmitPatternPage from "./pages/SubmitPatternPage";
-import VerifyEmailPage from "./pages/VerifyEmailPage";
 
 export default function App() {
   return (
@@ -25,18 +21,17 @@ export default function App() {
       <UpdateBanner />
       <Container as="main" className="py-4">
         <Routes>
+          <Route path="/" element={<Navigate to="/community" replace />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
           <Route
-            path="/"
+            path="/community"
             element={
               <ProtectedRoute>
-                <HomePage />
+                <CommunityPage />
               </ProtectedRoute>
             }
           />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/community" element={<CommunityPage />} />
           <Route path="/pattern/:id" element={<PatternDetailPage />} />
           <Route
             path="/pattern/:id/edit"
@@ -46,7 +41,14 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/submit" element={<SubmitPatternPage />} />
+          <Route
+            path="/submit"
+            element={
+              <ProtectedRoute>
+                <SubmitPatternPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/submit/review"
             element={
@@ -72,26 +74,10 @@ export default function App() {
             }
           />
           <Route
-            path="/shared-with-me"
-            element={
-              <ProtectedRoute>
-                <SharedWithMePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/stitch-fiddle"
             element={
               <ProtectedRoute>
                 <StitchFiddlePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/settings/notifications"
-            element={
-              <ProtectedRoute>
-                <NotificationSettingsPage />
               </ProtectedRoute>
             }
           />
