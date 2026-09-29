@@ -80,7 +80,7 @@ export default function RegisterPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={6}
+                  minLength={8}
                 />
               </Form.Group>
               {error && <Alert variant="danger">{error}</Alert>}

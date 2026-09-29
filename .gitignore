@@ -207,3 +207,6 @@ backend/instance/
 
 # Working notes, not part of the app
 SESSION_CONTEXT.txt
+cookies.txt
+package-lock.json
+package.json
