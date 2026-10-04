@@ -13,9 +13,7 @@ Treat every field this module returns as a suggestion, not ground truth.
 """
 
 import io
-import ipaddress
 import re
-import socket
 from urllib.parse import unquote, urljoin, urlparse
 
 import pdfplumber
@@ -62,23 +60,9 @@ BLOCK_LEVEL_TAGS = ("p", "li", "div", "tr", "h1", "h2", "h3", "h4", "h5", "h6")
 # doesn't get misread as a new part.
 MAX_LABEL_LENGTH = 80
 
-MATERIALS_KEYWORDS = [
-    "materials", "you will need", "you'll need", "ingredients", "supplies",
-    # Hebrew: "materials", "what you'll need", "equipment", "required".
-    "חומרים", "מה תצטרכו", "ציוד", "דרוש",
-]
-ABBREVIATIONS_KEYWORDS = [
-    "abbreviation", "abbrev", "glossary", "terms", "ab",
-    # Hebrew: "abbreviations", "terms" -- "מילון מונחים" (glossary) already
-    # matches via "מונחים" as a substring, same "ab" is a substring of
-    # "abbreviation" trick the English list already relies on.
-    "קיצורים", "מונחים",
-]
-INSTRUCTIONS_KEYWORDS = [
-    "instructions", "pattern", "crochet pattern", "directions", "how to make",
-    # Hebrew: "instructions", "directions/guidelines", "how it's made".
-    "הוראות", "הנחיות", "אופן הביצוע",
-]
+MATERIALS_KEYWORDS = ["materials", "you will need", "you'll need", "ingredients", "supplies"]
+ABBREVIATIONS_KEYWORDS = ["abbreviation", "abbrev", "glossary", "terms", "ab"]
+INSTRUCTIONS_KEYWORDS = ["instructions", "pattern", "crochet pattern", "directions", "how to make"]
 
 # Matches a numbered line used as a fallback step splitter when a page has
 # no line-break markup at all, e.g. "1. Cast on 40 stitches. 2. Join...".
@@ -90,7 +74,7 @@ class ScraperError(Exception):
     """Raised when a pattern page can't be fetched or meaningfully parsed."""
 
 
-def scrape_pattern_from_url(url: str, *, allow_file: bool = False) -> dict:
+def scrape_pattern_from_url(url: str) -> dict:
     """
     Fetch `url` and heuristically extract a pattern draft.
 
@@ -100,14 +84,8 @@ def scrape_pattern_from_url(url: str, *, allow_file: bool = False) -> dict:
     response (including sites that block automated fetching -- see
     _looks_like_bot_challenge). See parse_pattern_html for what's returned
     and how parsing failures degrade.
-
-    `allow_file` gates file:// support (see _fetch_html) -- it defaults to
-    False because this function is reachable from POST /api/patterns/preview
-    with a user-supplied URL, and file:// there would let any logged-in
-    user read arbitrary local files off the server. Only the local CLI
-    entry point at the bottom of this module passes allow_file=True.
     """
-    return parse_pattern_html(_fetch_html(url, allow_file=allow_file), url)
+    return parse_pattern_html(_fetch_html(url), url)
 def looks_like_cloudflare_challenge(page: Page) -> bool:
     title = page.title().lower()
     body_text = page.locator("body").inner_text(timeout=5_000).lower()
@@ -244,83 +222,19 @@ def parse_pattern_pdf(pdf_bytes: bytes, source_url: str) -> dict:
     }
 
 
-def _is_public_hostname(hostname: str) -> bool:
-    """
-    True if every address `hostname` resolves to is a normal public
-    internet address -- false for loopback (127.0.0.1, ::1), private
-    (10.x, 192.168.x, ...), link-local (169.254.x.x, including cloud
-    metadata endpoints like 169.254.169.254), and other reserved ranges.
-    A hostname that fails to resolve at all is treated as not public.
-    """
-    try:
-        infos = socket.getaddrinfo(hostname, None)
-    except socket.gaierror:
-        return False
-    for info in infos:
-        addr = ipaddress.ip_address(info[4][0])
-        if (
-            addr.is_private
-            or addr.is_loopback
-            or addr.is_link_local
-            or addr.is_reserved
-            or addr.is_multicast
-            or addr.is_unspecified
-        ):
-            return False
-    return True
-
-
-def _is_request_allowed(url: str) -> bool:
-    """
-    Used by the page.route handler in _fetch_html to vet every request the
-    browser makes while rendering a page (main navigation, redirects, and
-    sub-resources alike), since a same-site redirect or DNS rebind could
-    otherwise steer the browser at an internal address after the initial
-    URL has already passed _guard_request_url. Non-network schemes
-    (data:, blob:, about:, ...) are harmless and always allowed; file: is
-    always blocked here regardless of the allow_file flag (that flag only
-    covers *this module* reading a local path directly, never the browser
-    navigating to one); http(s) requests must resolve to a public address.
-    """
-    parsed = urlparse(url)
-    if parsed.scheme == "file":
-        return False
-    if parsed.scheme not in ("http", "https"):
-        return True
-    return bool(parsed.hostname) and _is_public_hostname(parsed.hostname)
-
-
-def _guard_request_url(url: str) -> None:
-    """
-    Raise ScraperError unless `url` is a plain http(s) URL pointing at a
-    public address. Used as the up-front check on the URL the caller
-    actually asked to fetch, before Playwright is even launched.
-    """
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ScraperError(f"Unsupported URL scheme for fetching: {parsed.scheme or url!r}")
-    if not parsed.hostname or not _is_public_hostname(parsed.hostname):
-        raise ScraperError(f"{url} points at a private or unreachable address and can't be fetched.")
-
-
-def _fetch_html(url: str, *, allow_file: bool = False) -> str:
+def _fetch_html(url: str) -> str:
     """
     Download the page HTML, raising ScraperError on any failure.
 
     Uses a headless browser (Playwright) to handle JavaScript-based sites
     and bot-detection challenges (e.g. Cloudflare).
 
-    When allow_file=True, also accepts file:// URLs, which are read
-    straight off disk instead of over HTTP -- handy for testing the
-    extraction heuristics against a saved HTML snapshot (see the CLI entry
-    point at the bottom of this file, which turns a plain local path into
-    one of these automatically). Defaults to False because this is
-    reachable from a user-supplied URL via POST /api/patterns/preview,
-    where file:// access would be an arbitrary local file read.
+    Also accepts file:// URLs, which are read straight off disk instead of
+    over HTTP -- handy for testing the extraction heuristics against a
+    saved HTML snapshot (see the CLI entry point at the bottom of this
+    file, which turns a plain local path into one of these automatically).
     """
     if url.startswith("file://"):
-        if not allow_file:
-            raise ScraperError("file:// URLs are not supported here.")
         # unquote is required here: Path.resolve().as_uri() (used by the
         # CLI below) percent-encodes characters like spaces (" " -> "%20")
         # per the URI spec, but urlparse() does not decode that back --
@@ -333,17 +247,9 @@ def _fetch_html(url: str, *, allow_file: bool = False) -> str:
         except OSError as exc:
             raise ScraperError(f"Could not read {path}: {exc}") from exc
 
-    _guard_request_url(url)
-
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(user_agent=USER_AGENT)
-        # Re-checked per-request (not just the initial URL above) so a
-        # redirect chain can't steer the browser at an internal address
-        # after the up-front check on the original URL already passed.
-        page.route("**/*", lambda route: (
-            route.continue_() if _is_request_allowed(route.request.url) else route.abort()
-        ))
         try:
             response = page.goto(url, timeout=30_000, wait_until="domcontentloaded")
 
@@ -467,24 +373,7 @@ def _find_author_phrase(text: str) -> str | None:
         r"\b(?:designed by|pattern by|written by|by)\s+([A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]+){0,2})",
         text[:2000],
     )
-    if match:
-        return match.group(1).strip()
-
-    # Hebrew has no letter casing, so the [A-Z] signal above -- which
-    # doubles as an implicit "this still looks like part of the name, not
-    # the next sentence" boundary -- doesn't apply. Without it, capping at
-    # 3 words (like the Latin pattern) is too greedy: get_text(" ") joins
-    # separate tags with a single space, so a name immediately followed by
-    # the next heading (e.g. "מאת דנה כהן חומרים") would swallow that
-    # heading's first word as if it were part of the name. Capped at 2
-    # words instead (first + last name, the common case) to keep that
-    # failure mode rare rather than eliminating a signal we don't have.
-    hebrew_match = re.search(
-        r"(?:מאת|עיצוב(?: של| על ידי)?|נוצר על ידי)\s*[:\-]?\s*"
-        r"([א-ת]+['׳]?(?:\s+[א-ת]+['׳]?){0,1})",
-        text[:2000],
-    )
-    return hebrew_match.group(1).strip() if hebrew_match else None
+    return match.group(1).strip() if match else None
 
 
 def _is_bold(tag) -> bool:
@@ -607,18 +496,16 @@ def _classify_lines(
          contains a materials/abbreviations/instructions keyword, it starts
          that section -- even if the line isn't in `label_texts` at all.
          Most pattern pages are consistent about the *words* "Materials",
-         "Abbreviations", "Instructions"/"Directions"/"Pattern" (or their
-         Hebrew equivalents -- see MATERIALS_KEYWORDS et al., which carry
-         both) even when they're inconsistent (or entirely absent) about
-         bolding them, so keyword text is the stronger, more portable
-         signal and is checked before anything else.
+         "Abbreviations", "Instructions"/"Directions"/"Pattern" even when
+         they're inconsistent (or entirely absent) about bolding them, so
+         keyword text is the stronger, more portable signal and is checked
+         before anything else.
       2. `label_texts` membership as a fallback, used only to find *part*
          boundaries within the instructions once we're past whichever of
          the above got us there -- arbitrary part names like "Body:" or
-         "Cuff's Ribbing:" (in any language/script) have no shared keyword
-         vocabulary, so styling (however it's represented for this format)
-         is the only signal available for those -- this step is already
-         language-agnostic, since it never inspects the label text itself.
+         "Cuff's Ribbing:" have no shared keyword vocabulary, so styling
+         (however it's represented for this format) is the only signal
+         available for those.
     Lines before the first recognized section are discarded. A part is only
     kept if at least one step line was collected for it, so a heading that
     turns out to be immediately followed by another heading (e.g. a bare
@@ -759,7 +646,7 @@ if __name__ == "__main__":
             sys.exit(1)
         target = local_path.resolve().as_uri()
     try:
-        result = scrape_pattern_from_url(target, allow_file=True)
+        result = scrape_pattern_from_url(target)
     except ScraperError as exc:
         print(f"ScraperError: {exc}", file=sys.stderr)
         sys.exit(1)

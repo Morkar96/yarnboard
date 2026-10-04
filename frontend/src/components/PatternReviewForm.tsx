@@ -4,18 +4,8 @@
  * backend/app/scraper.py), so every field here is editable rather than
  * read-only -- this is the human review step that makes the heuristic
  * extraction trustworthy enough to publish.
- *
- * Every text field uses dir="auto" rather than inheriting the page's
- * ambient direction (which follows the UI language toggle, see
- * main.tsx's applyDirection) -- a pattern's own content is independent of
- * whatever language the UI chrome happens to be in (e.g. a Hebrew-
- * sourced pattern reviewed while the UI is still in English, or vice
- * versa), so each field needs to detect and align to *its own* text
- * per-field, via the browser's native bidi algorithm, not the
- * surrounding page's direction.
  */
 import { Button, Card, Form, InputGroup } from "react-bootstrap";
-import { useTranslation } from "react-i18next";
 import { resolvePhotoUrl } from "../api/client";
 import type { PatternDraft } from "../types/models";
 
@@ -25,8 +15,6 @@ interface Props {
 }
 
 export default function PatternReviewForm({ draft, onChange }: Props) {
-  const { t } = useTranslation();
-
   function updateField<K extends keyof PatternDraft>(field: K, value: PatternDraft[K]) {
     onChange({ ...draft, [field]: value });
   }
@@ -91,17 +79,13 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
   return (
     <div className="d-flex flex-column gap-3">
       <Form.Group controlId="review-title">
-        <Form.Label>{t("reviewForm.titleLabel")}</Form.Label>
-        <Form.Control
-          dir="auto"
-          value={draft.title}
-          onChange={(e) => updateField("title", e.target.value)}
-        />
+        <Form.Label>Title</Form.Label>
+        <Form.Control value={draft.title} onChange={(e) => updateField("title", e.target.value)} />
       </Form.Group>
 
       {draft.photo_url && (
         <Form.Group controlId="review-photo">
-          <Form.Label>{t("reviewForm.photoLabel")}</Form.Label>
+          <Form.Label>Photo (found automatically)</Form.Label>
           <div>
             <img
               src={resolvePhotoUrl(draft.photo_url)}
@@ -118,27 +102,27 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
             className="mt-2"
             onClick={() => updateField("photo_url", null)}
           >
-            {t("reviewForm.removePhoto")}
+            Remove this photo
           </Button>
-          <Form.Text className="d-block text-muted">{t("reviewForm.photoHint")}</Form.Text>
+          <Form.Text className="d-block text-muted">
+            You can upload a different photo after publishing, from the pattern's Edit page.
+          </Form.Text>
         </Form.Group>
       )}
 
       <Form.Group controlId="review-author">
-        <Form.Label>{t("reviewForm.authorLabel")}</Form.Label>
+        <Form.Label>Original author</Form.Label>
         <Form.Control
-          dir="auto"
           value={draft.author ?? ""}
-          placeholder={t("reviewForm.authorPlaceholder")}
+          placeholder="Unknown"
           onChange={(e) => updateField("author", e.target.value || null)}
         />
       </Form.Group>
 
       <Form.Group controlId="review-materials">
-        <Form.Label>{t("reviewForm.materialsLabel")}</Form.Label>
+        <Form.Label>Materials</Form.Label>
         <Form.Control
           as="textarea"
-          dir="auto"
           rows={3}
           value={draft.materials}
           onChange={(e) => updateField("materials", e.target.value)}
@@ -146,17 +130,16 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
       </Form.Group>
 
       <Form.Group controlId="review-abbreviations">
-        <Form.Label>{t("reviewForm.abbreviationsLabel")}</Form.Label>
+        <Form.Label>Abbreviations</Form.Label>
         <Form.Control
           as="textarea"
-          dir="auto"
           rows={3}
           value={draft.abbreviations}
           onChange={(e) => updateField("abbreviations", e.target.value)}
         />
       </Form.Group>
 
-      <h5 className="mt-2">{t("reviewForm.instructionsHeading")}</h5>
+      <h5 className="mt-2">Instructions</h5>
       {Object.entries(draft.instructions).map(([part, steps], partIndex, allParts) => (
         <Card key={part} className="shadow-sm">
           <Card.Body className="d-flex flex-column gap-2">
@@ -165,8 +148,8 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
                 variant="outline-secondary"
                 onClick={() => movePart(part, -1)}
                 disabled={partIndex === 0}
-                title={t("reviewForm.movePartUp")}
-                aria-label={t("reviewForm.movePartUpAria", { part })}
+                title="Move part up"
+                aria-label={`Move part "${part}" up`}
               >
                 &uarr;
               </Button>
@@ -174,51 +157,46 @@ export default function PatternReviewForm({ draft, onChange }: Props) {
                 variant="outline-secondary"
                 onClick={() => movePart(part, 1)}
                 disabled={partIndex === allParts.length - 1}
-                title={t("reviewForm.movePartDown")}
-                aria-label={t("reviewForm.movePartDownAria", { part })}
+                title="Move part down"
+                aria-label={`Move part "${part}" down`}
               >
                 &darr;
               </Button>
               <Form.Control
                 className="fw-semibold"
-                dir="auto"
                 value={part}
                 onChange={(e) => updatePartName(part, e.target.value)}
               />
               <Button
                 variant="outline-danger"
                 onClick={() => deletePart(part)}
-                title={t("reviewForm.deletePart")}
-                aria-label={t("reviewForm.deletePartAria", { part })}
+                title="Delete this part"
+                aria-label={`Delete part "${part}"`}
               >
-                {t("reviewForm.deletePart")}
+                Delete part
               </Button>
             </InputGroup>
             {steps.map((step, index) => (
               <InputGroup key={index}>
-                <Form.Control
-                  dir="auto"
-                  value={step}
-                  onChange={(e) => updateStep(part, index, e.target.value)}
-                />
+                <Form.Control value={step} onChange={(e) => updateStep(part, index, e.target.value)} />
                 <Button
                   variant="outline-secondary"
                   onClick={() => deleteStep(part, index)}
-                  title={t("reviewForm.deleteStepAria", { number: index + 1, part })}
-                  aria-label={t("reviewForm.deleteStepAria", { number: index + 1, part })}
+                  title="Delete this step"
+                  aria-label={`Delete step ${index + 1} of "${part}"`}
                 >
                   &times;
                 </Button>
               </InputGroup>
             ))}
             <Button variant="outline-primary" size="sm" className="align-self-start" onClick={() => addStep(part)}>
-              {t("reviewForm.addStep")}
+              + Add step
             </Button>
           </Card.Body>
         </Card>
       ))}
       <Button variant="outline-primary" className="align-self-start" onClick={addPart}>
-        {t("reviewForm.addPart")}
+        + Add part
       </Button>
     </div>
   );
