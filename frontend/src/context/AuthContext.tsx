@@ -13,6 +13,7 @@ import {
 } from "react";
 import * as api from "../api/client";
 import type { User } from "../types/models";
+import { clearAllGuestProgress, getAllGuestProgress } from "../utils/guestProgress";
 
 interface AuthContextValue {
   user: User | null;
@@ -42,8 +43,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function register(username: string, email: string, password: string) {
-    await api.register(username, email, password);
-    await login(email, password);
+    // Deliberately doesn't log in afterwards: the account is created
+    // unverified, and login() now 403s until the emailed link is followed
+    // (see auth/routes.py). RegisterPage shows a "check your email"
+    // message instead of navigating in as if a session had started.
+    //
+    // Any checklist progress ticked off in this browser as a guest (see
+    // guestProgress.ts) is handed off to the new account here, once, so
+    // it isn't silently lost the moment someone who's been using the app
+    // logged-out signs up -- cleared locally right after so a later
+    // registration in the same browser (a different account) doesn't
+    // re-attach it.
+    await api.register(username, email, password, getAllGuestProgress());
+    clearAllGuestProgress();
   }
 
   async function logout() {

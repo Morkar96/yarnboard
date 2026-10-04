@@ -10,6 +10,7 @@
  */
 import { useEffect, useState } from "react";
 import { Alert } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { acknowledgePatternUpdate, fetchNotifications } from "../api/client";
 import { useAuth } from "../context/AuthContext";
@@ -19,6 +20,7 @@ const POLL_INTERVAL_MS = 60_000;
 
 export default function UpdateBanner() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [notifications, setNotifications] = useState<PatternNotification[]>([]);
 
   useEffect(() => {
@@ -63,8 +65,7 @@ export default function UpdateBanner() {
     <div className="container pt-3">
       {notifications.map((n) => (
         <Alert key={n.id} variant="info" dismissible onClose={() => dismiss(n.id)}>
-          <Link to={`/pattern/${n.id}`}>{n.title}</Link> has changed since you last worked on
-          it. Dismissing this will clear your old checklist progress on it.
+          <Link to={`/pattern/${n.id}`}>{n.title}</Link> {t("updateBanner.changedNotice")}
         </Alert>
       ))}
     </div>
