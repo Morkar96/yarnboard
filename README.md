@@ -151,6 +151,40 @@ enable it once `frontend/.mcp.json` is picked up); every generated or
 healed change should still be reviewed like any other diff before it's
 trusted.
 
+### Running the e2e suite against the deployed dev environment
+
+```bash
+cp frontend/e2e-dev/.env.example frontend/e2e-dev/.env
+# edit frontend/e2e-dev/.env, filling in E2E_REMOTE_DATABASE_URL
+npm --prefix frontend run test:e2e:dev
+```
+
+`frontend/e2e-dev/.env` is loaded automatically (see `fixtures.ts`) and is
+already covered by the repo's root `.gitignore` -- never commit it. An
+`export`ed shell variable of the same name still works too, if you'd
+rather not use a file.
+
+A separate suite (`frontend/e2e-dev/`, `playwright.dev.config.ts`) that
+exercises the real deployed dev environment (the Cloudflare-hosted
+frontend + the `yarnboard-dev-api` Render backend) instead of local dev
+servers -- for spot-checking an actual deployment, not a substitute for
+`make e2e` above. Every run records video (`video: "on"`), so a
+spot-check leaves behind something to watch afterward, in
+`frontend/test-results/`.
+
+Since the dev database is a real, never-wiped database (not a
+disposable local file), this suite creates its fixtures non-destructively
+through the real API in `global-setup.ts` -- registering a few
+uniquely-suffixed users and one shared pattern per run, exactly as a real
+user would, rather than reusing `seed-e2e`'s `drop_all()`. Verifying a
+fixture user's email still needs the same `e2e-verify-token` CLI command
+as the local suite, just pointed at the remote database via
+`E2E_REMOTE_DATABASE_URL` instead of the local SQLite file -- export that
+in your own shell only, never commit it.
+
+Not run in CI, and deliberately doesn't check real email delivery -- see
+`frontend/e2e-dev/notifications.spec.ts`'s docstring for why.
+
 ## Deploying to Render
 
 Yarnboard deploys as a **single** Render web service (not separate

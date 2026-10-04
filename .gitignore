@@ -199,6 +199,13 @@ frontend/e2e/.auth/
 /backend.log
 /frontend.log
 
+# Playwright suite against the deployed dev environment
+# (frontend/e2e-dev/, run via `npm run test:e2e:dev`) -- same rationale
+# as frontend/e2e/.auth/ above, plus a per-run fixtures file recording the
+# usernames/pattern id global-setup.ts created via the real API.
+frontend/e2e-dev/.auth/
+frontend/e2e-dev/.fixtures.json
+
 # Local SQLite dev database (backend falls back to this when DATABASE_URL
 # isn't set). Flask-SQLAlchemy resolves relative sqlite:/// paths against
 # the app's instance folder, so the file lands in backend/instance/.
