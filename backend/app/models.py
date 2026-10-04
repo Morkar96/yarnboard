@@ -1,15 +1,26 @@
 """
 Database models for Yarnboard.
 
-Three tables:
+Tables:
   - User: an account. Tracks patterns it uploaded (one-to-many) and patterns
     it bookmarked from the community (many-to-many, via saved_patterns).
   - Pattern: a single knitting/crochet pattern, scraped from a source URL.
-    Patterns are shared/public once submitted -- every user sees the same
-    row -- and are deduplicated on `original_url`.
+    Private by default -- visible only to its uploader and admins -- until
+    the uploader explicitly publishes it (Pattern.is_public); see
+    PatternShare below for the narrower "just these specific people" option
+    in between. `original_url` is deduplicated per-uploader always, and
+    globally only among published patterns -- see
+    Pattern.find_duplicate's docstring.
+  - PatternShare: an uploader-granted access exception for one specific
+    other user, independent of is_public. can_edit decides whether that
+    grant is view-only or also lets them edit the pattern's content.
   - UserPatternProgress: which checklist steps a *specific* user has ticked
     off on a *specific* pattern. This is intentionally its own table rather
     than a field on Pattern -- see its docstring below for why.
+  - Notification: an in-app notification for one user, e.g. "so-and-so
+    shared a pattern with you". See User.notification_settings for the
+    per-type email/in-app toggles that gate whether one of these actually
+    gets created (see notifications.py's notify() helper).
 """
 
 from urllib.parse import urlparse
@@ -48,6 +59,15 @@ class User(db.Model):
     email_verify_token = db.Column(db.String(64), unique=True, nullable=True)
     email_verify_token_created_at = db.Column(db.DateTime, nullable=True)
 
+    # Per-notification-type {"email": bool, "in_app": bool} toggles, e.g.
+    # {"pattern_updated": {"email": true, "in_app": true}, "pattern_shared":
+    # {"email": false, "in_app": true}}. Missing keys (an older row, or a
+    # notification type added after this user registered) default to "on"
+    # for both channels -- see notifications.py's is_enabled(), which is
+    # the only code that reads this column, so a missing/None value here
+    # never has to be special-cased anywhere else.
+    notification_settings = db.Column(db.JSON, nullable=True)
+
     # Patterns this user personally submitted (shown on "My Uploads").
     uploaded_patterns = db.relationship("Pattern", backref="uploader", lazy=True)
 
@@ -76,10 +96,17 @@ class Pattern(db.Model):
     user who views/saves the pattern, so per-user checklist state is tracked
     separately in UserPatternProgress and merged in at read time by
     to_dict(current_user_id=...).
+
+    Visibility: every new pattern starts private (is_public=False) --
+    visible only to its uploader, admins, and anyone explicitly granted
+    access via PatternShare. The uploader (or an admin) can publish it to
+    the whole community at any time via POST /<id>/publish, which is
+    one-way -- there's no unpublish. See patterns/routes.py's _can_view for
+    the actual visibility check used by every read endpoint.
     """
 
     id = db.Column(db.Integer, primary_key=True)
-    original_url = db.Column(db.String(512), unique=True, nullable=False)
+    original_url = db.Column(db.String(512), nullable=False)
     title = db.Column(db.String(200), nullable=False)
 
     # Attribution to the *original* creator/site, as distinct from the
@@ -127,8 +154,72 @@ class Pattern(db.Model):
     chart_grid_rows = db.Column(db.Integer, nullable=True)
     chart_palette = db.Column(db.JSON, nullable=True)
 
+    # Hebrew translation, populated on-demand via POST /<id>/translate (see
+    # patterns/routes.py) rather than at submit time -- a pattern nobody
+    # ever views in Hebrew never costs a translation API call.
+    #
+    # instructions_he is keyed by the *exact same keys* as `instructions`
+    # (the pattern's own primary-content part names, whatever language
+    # those happen to be in -- see the scraper's Hebrew keyword support in
+    # scraper.py, a pattern's primary content isn't always English) --
+    # never translated keys of its own. Each value is {"heading_he": str,
+    # "steps_he": [str, ...]}, with steps_he the same length as the
+    # corresponding primary steps list. This is deliberate:
+    # UserPatternProgress.completed_steps and toggle_progress (see below,
+    # and patterns/routes.py) key checklist progress by the primary part
+    # name string, so a Hebrew-mode checklist looks up instructions_he[part]
+    # purely for display text while still reporting progress against the
+    # same primary `part`/index the primary-language view would use. If
+    # instructions_he ever had its own translated keys, Hebrew-mode
+    # progress would have nothing compatible to attach to. The edit
+    # endpoint enforces this shape (same keys, same list lengths) rather
+    # than trusting it.
+    title_he = db.Column(db.String(200), nullable=True)
+    materials_he = db.Column(db.Text, nullable=True)
+    abbreviations_he = db.Column(db.Text, nullable=True)
+    instructions_he = db.Column(db.JSON, nullable=True)
+    # False until a human (uploader or admin) has confirmed the
+    # auto-translation -- see _validate_translated_instructions in
+    # patterns/routes.py's edit_pattern, which is what flips this True.
+    translation_reviewed = db.Column(db.Boolean, nullable=False, default=False)
+
+    # English translation -- the exact mirror of the title_he/materials_he/
+    # abbreviations_he/instructions_he/translation_reviewed group above,
+    # for a pattern whose *primary* content is itself Hebrew (a Hebrew
+    # source page, scraped via scraper.py's Hebrew keyword support) and
+    # needs an English overlay instead. Same POST /<id>/translate-to-
+    # english on-demand trigger, same instructions_en key-preservation
+    # rule (English-mode checklist progress still keyed by the pattern's
+    # own primary part names), same PATCH /<id> edit/review path -- see
+    # each _he field's docstring above for the reasoning, which applies
+    # here unchanged just with the language swapped.
+    title_en = db.Column(db.String(200), nullable=True)
+    materials_en = db.Column(db.Text, nullable=True)
+    abbreviations_en = db.Column(db.Text, nullable=True)
+    instructions_en = db.Column(db.JSON, nullable=True)
+    translation_en_reviewed = db.Column(db.Boolean, nullable=False, default=False)
+
     uploader_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+    # Python-side default=False governs new inserts (every new pattern
+    # starts private); the add-pattern-visibility-columns migration in
+    # app/__init__.py backfills existing rows as TRUE instead, the same
+    # "grandfather existing data in, gate only what's new" split
+    # email_verified's docstring above describes -- patterns that were
+    # already community-visible before this feature existed shouldn't
+    # suddenly vanish from it.
+    is_public = db.Column(db.Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        # original_url was globally unique before sharing/visibility
+        # existed; now it's unique per-uploader (each user may hold their
+        # own private copy of the same source), with global uniqueness
+        # enforced only among published rows at the application layer --
+        # see find_duplicate below and patterns/routes.py's publish
+        # endpoint, which is where a second *public* copy is rejected.
+        db.UniqueConstraint("original_url", "uploader_id", name="uq_pattern_original_url_uploader"),
+    )
 
     @staticmethod
     def derive_source_domain(url: str) -> str:
@@ -137,6 +228,28 @@ class Pattern(db.Model):
         need to recompute it without re-scraping."""
         netloc = urlparse(url).netloc
         return netloc[4:] if netloc.startswith("www.") else netloc
+
+    @staticmethod
+    def find_duplicate(original_url: str, uploader_id: int):
+        """
+        The existing pattern a new submission/import of `original_url`
+        should be treated as a duplicate of, if any -- used by both the
+        submit/import dedup checks and /preview's "you already have this"
+        short-circuit.
+
+        Two cases: this uploader already has their own copy of this URL
+        (public or still-private -- resubmitting should just point back at
+        it, not create a second row, which the unique constraint above
+        would reject anyway), or *anyone's* copy is already published
+        (only one canonical public row per URL, regardless of who
+        uploaded it -- a still-private pattern from someone else doesn't
+        count as a duplicate, since the new uploader can't see it and is
+        entitled to their own private copy).
+        """
+        return Pattern.query.filter(
+            Pattern.original_url == original_url,
+            db.or_(Pattern.is_public.is_(True), Pattern.uploader_id == uploader_id),
+        ).first()
 
     def to_dict(self, current_user_id=None):
         """
@@ -206,10 +319,51 @@ class Pattern(db.Model):
                 "palette": self.chart_palette,
                 "cells": list(self.chart_grid_data),
             } if self.chart_grid_data else None,
+            "translations": {
+                "he": {
+                    "title": self.title_he,
+                    "materials": self.materials_he,
+                    "abbreviations": self.abbreviations_he,
+                    "instructions": self.instructions_he,
+                    "reviewed": self.translation_reviewed,
+                } if self.title_he else None,
+                "en": {
+                    "title": self.title_en,
+                    "materials": self.materials_en,
+                    "abbreviations": self.abbreviations_en,
+                    "instructions": self.instructions_en,
+                    "reviewed": self.translation_en_reviewed,
+                } if self.title_en else None,
+            },
             "uploader": self.uploader.username if self.uploader else "Unknown",
             "uploader_id": self.uploader_id,
+            "is_public": self.is_public,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            # Computed per-viewer, same spirit as the progress merge above --
+            # lets the frontend show/hide edit controls (the Edit link,
+            # PatternVisibilityPanel) without duplicating the permission
+            # logic that already lives in patterns/routes.py's _can_edit/
+            # _can_manage. Kept in sync with those by hand (this file
+            # can't import from patterns/routes.py without a circular
+            # import) -- if either changes, update both.
+            "can_edit": self._can_edit_for(current_user_id),
+            "can_manage": self._can_manage_for(current_user_id),
         }
+
+    def _can_manage_for(self, user_id) -> bool:
+        """Mirrors patterns/routes.py's _can_manage: uploader or an admin."""
+        if user_id is None:
+            return False
+        user = User.query.get(user_id)
+        return bool(user and (user.is_admin or self.uploader_id == user.id))
+
+    def _can_edit_for(self, user_id) -> bool:
+        """Mirrors patterns/routes.py's _can_edit: uploader/admin, or an
+        edit-level PatternShare grant."""
+        if self._can_manage_for(user_id):
+            return True
+        share = PatternShare.query.filter_by(pattern_id=self.id, user_id=user_id).first()
+        return bool(share and share.can_edit)
 
 
 class UserPatternProgress(db.Model):
@@ -244,7 +398,10 @@ class UserPatternProgress(db.Model):
     )
 
     user = db.relationship("User", backref=db.backref("progress_entries", lazy=True))
-    pattern = db.relationship("Pattern", backref=db.backref("progress_entries", lazy=True))
+    pattern = db.relationship(
+        "Pattern",
+        backref=db.backref("progress_entries", lazy=True, cascade="all, delete-orphan"),
+    )
 
     __table_args__ = (
         db.UniqueConstraint("user_id", "pattern_id", name="uq_user_pattern_progress"),
@@ -297,5 +454,83 @@ class StitchFiddleLink(db.Model):
             "share_url": self.share_url,
             "chart_id": self.chart_id,
             "imported_pattern_id": self.imported_pattern_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class PatternShare(db.Model):
+    """
+    A view-only access grant: the uploader (or an admin) lets one specific
+    other user see a pattern that isn't public yet, without publishing it
+    to the whole community. Independent of Pattern.is_public -- a pattern
+    can be private-with-three-shares, fully public (shares become moot,
+    everyone can already see it, but aren't cleared), or private with none.
+
+    Grants viewing by default; can_edit upgrades one specific grant to also
+    let that user edit the pattern's content (_can_edit in
+    patterns/routes.py checks this in addition to uploader/admin). The
+    uploader/an admin can flip can_edit on an existing share at any time
+    via PATCH /<pattern_id>/shares/<user_id> -- a share's permission level
+    isn't fixed at grant time.
+    """
+
+    id = db.Column(db.Integer, primary_key=True)
+    pattern_id = db.Column(db.Integer, db.ForeignKey("pattern.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    can_edit = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+    pattern = db.relationship(
+        "Pattern", backref=db.backref("shares", lazy=True, cascade="all, delete-orphan")
+    )
+    user = db.relationship("User")
+
+    __table_args__ = (
+        db.UniqueConstraint("pattern_id", "user_id", name="uq_pattern_share"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "username": self.user.username if self.user else None,
+            "can_edit": self.can_edit,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class Notification(db.Model):
+    """
+    One in-app notification for one user (e.g. "alex shared 'Granny
+    Square' with you"). Purely a display/inbox concern -- see
+    notifications.py's notify() for the single place these get created,
+    which also handles the parallel email send, gated independently by
+    User.notification_settings per channel.
+    """
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    # A fixed, growing set of machine keys (see notifications.py's
+    # NOTIFICATION_TYPES) -- not a free-text category -- so the frontend
+    # can render a specific icon/i18n string per type rather than just
+    # dumping `message` verbatim.
+    type = db.Column(db.String(50), nullable=False)
+    message = db.Column(db.String(500), nullable=False)
+    # Where clicking this notification should take the user, e.g.
+    # "/pattern/42". Nullable since not every notification type points
+    # somewhere (kept generic rather than a pattern_id FK for that reason).
+    link = db.Column(db.String(500), nullable=True)
+    read = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+    user = db.relationship("User", backref=db.backref("notifications", lazy=True))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "type": self.type,
+            "message": self.message,
+            "link": self.link,
+            "read": self.read,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

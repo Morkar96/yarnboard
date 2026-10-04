@@ -1,54 +1,92 @@
-/** Step 1 of submitting a pattern: paste a URL, scrape a preview draft,
- * then hand off to ReviewPatternPage for editing + the publish-consent
- * gate. See PublishConsentNotice for why the review step isn't skippable.
+/** Step 1 of submitting a pattern: either paste a URL to scrape, or
+ * upload a file directly -- two explicit, always-available choices (see
+ * `mode` below), not one hidden behind the other failing. Either way,
+ * this hands off a preview draft to ReviewPatternPage for editing + the
+ * publish-consent gate. See PublishConsentNotice for why the review step
+ * isn't skippable.
  *
- * Some sites block automatic fetching entirely (e.g. Cloudflare's
- * bot-detection challenge -- see backend/app/scraper.py). When that
- * happens this page offers a fallback: upload the page's saved HTML, or a
- * PDF (e.g. a paid Etsy/Ravelry pattern that only exists as a PDF in the
- * first place -- there's nothing to "fetch" for those at all), and the
- * same extraction heuristics run against that instead. */
+ * "Upload a file" exists for two different reasons that both land on the
+ * same form: a PDF (e.g. a paid Etsy/Ravelry pattern that only exists as
+ * a PDF in the first place -- there's nothing to "fetch" for those at
+ * all) always needs this path, while a normal webpage only needs it when
+ * automatic fetching is blocked (e.g. Cloudflare's bot-detection
+ * challenge -- see backend/app/scraper.py); the URL field stays required
+ * in both cases since it's still what dedup and attribution are based on.
+ * A URL-fetch failure also auto-switches to this tab, pre-filled, so the
+ * fallback case doesn't need to be discovered separately.
+ *
+ * This page itself is public (unregistered visitors can read how
+ * uploading works), but the actual scrape/submit endpoints all require
+ * login server-side -- so anonymous visitors see the explanation plus a
+ * login/register prompt instead of the live form, rather than being able
+ * to fill it out and only find out it's blocked at the end. */
 import { useState, type FormEvent } from "react";
-import { Alert, Button, Card, Form } from "react-bootstrap";
+import { Alert, Button, ButtonGroup, Form } from "react-bootstrap";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
-import { ApiError, previewPattern, previewPatternFromUpload } from "../api/client";
+import { previewPattern, previewPatternFromUpload } from "../api/client";
+import { useAuth } from "../context/AuthContext";
+import { useApiErrorMessage } from "../i18n/useApiErrorMessage";
+
+type Mode = "link" | "upload";
+
+interface PreviewResult {
+  duplicate: boolean;
+  existing_pattern_id: number | null;
+  already_shared_with_you: number | null;
+  draft: unknown;
+}
 
 export default function SubmitPatternPage() {
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const getErrorMessage = useApiErrorMessage();
+  const [mode, setMode] = useState<Mode>("link");
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [offerUpload, setOfferUpload] = useState(false);
+  // Set instead of navigating straight to review when the preview came
+  // back with already_shared_with_you -- the warning has to actually be
+  // seen and give the user a real choice (view the shared pattern
+  // instead, or continue with their own copy), not just flash by while
+  // the page navigates on regardless (see handleContinueAnyway).
+  const [pendingSharedResult, setPendingSharedResult] = useState<PreviewResult | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
 
-  function goToReview(result: { duplicate: boolean; existing_pattern_id: number | null; draft: unknown }) {
+  function goToReview(result: PreviewResult) {
     if (result.duplicate) {
       navigate(`/pattern/${result.existing_pattern_id}`);
+      return;
+    }
+    if (result.already_shared_with_you) {
+      setPendingSharedResult(result);
       return;
     }
     navigate("/submit/review", { state: { draft: result.draft, originalUrl: url } });
   }
 
+  function handleContinueAnyway() {
+    if (!pendingSharedResult) return;
+    navigate("/submit/review", { state: { draft: pendingSharedResult.draft, originalUrl: url } });
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    setOfferUpload(false);
+    setPendingSharedResult(null);
     setLoading(true);
     try {
       goToReview(await previewPattern(url));
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : "Could not fetch that page. Check the URL and try again.",
-      );
+      setError(getErrorMessage(err, t("submit.genericFetchError")));
       // Any preview failure (blocked by bot-detection, timed out, DNS
       // error, etc.) can potentially be worked around by uploading the
-      // page's HTML yourself instead, so always offer it here rather than
-      // trying to sniff out which specific failure this was.
-      setOfferUpload(true);
+      // page's HTML yourself instead, so switch to that tab (URL
+      // preserved) rather than trying to sniff out which failure this was.
+      setMode("upload");
     } finally {
       setLoading(false);
     }
@@ -58,11 +96,12 @@ export default function SubmitPatternPage() {
     e.preventDefault();
     if (!uploadFile) return;
     setUploadError(null);
+    setPendingSharedResult(null);
     setUploadLoading(true);
     try {
       goToReview(await previewPatternFromUpload(url, uploadFile));
     } catch (err) {
-      setUploadError(err instanceof ApiError ? err.message : "Could not process that file.");
+      setUploadError(getErrorMessage(err, t("submit.genericUploadError")));
     } finally {
       setUploadLoading(false);
     }
@@ -70,63 +109,105 @@ export default function SubmitPatternPage() {
 
   return (
     <div>
-      <h1 className="mb-3">Submit a Pattern</h1>
-      <p className="text-muted">
-        Paste a link to a knitting or crochet pattern webpage. We'll pull out the title,
-        materials, abbreviations, and instructions for you to review before publishing.
-      </p>
-      <Form onSubmit={handleSubmit} className="mb-2" style={{ maxWidth: "32rem" }}>
-        <Form.Group className="mb-3" controlId="submit-url">
-          <Form.Label>Pattern URL</Form.Label>
-          <Form.Control
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://example.com/my-pattern"
-            required
-          />
-        </Form.Group>
-        {error && <Alert variant="danger">{error}</Alert>}
-        <Button type="submit" variant="primary" disabled={loading}>
-          {loading ? "Fetching..." : "Preview"}
-        </Button>
-      </Form>
+      <h1 className="mb-3">{t("submit.title")}</h1>
+      <p className="text-muted">{t("submit.intro")}</p>
 
-      {offerUpload && (
-        <Card className="shadow-sm my-4" style={{ maxWidth: "32rem" }}>
-          <Card.Body>
-            <p>
-              Couldn't fetch that page automatically -- some sites block automated requests. If
-              you have the page saved as an HTML file (open it in your browser, then "Save Page
-              As..." / "Save As" and choose "Webpage, HTML only"), or the pattern as a PDF (e.g.
-              a paid pattern from Etsy/Ravelry), you can upload it here instead. The URL above is
-              still used to credit the original source and to avoid duplicates.
-            </p>
-            <Form onSubmit={handleUploadPreview}>
-              <Form.Group className="mb-3" controlId="submit-upload-file">
-                <Form.Label>Saved HTML or PDF file</Form.Label>
+      {!user ? (
+        <Alert variant="light" style={{ maxWidth: "32rem" }}>
+          <Link to="/login">{t("submit.guestPromptLogin")}</Link> {t("common.or")}{" "}
+          <Link to="/register">{t("submit.guestPromptSignup")}</Link> {t("submit.guestPromptTail")}
+        </Alert>
+      ) : (
+        <>
+          <ButtonGroup className="mb-3">
+            <Button
+              variant={mode === "link" ? "primary" : "outline-primary"}
+              onClick={() => setMode("link")}
+            >
+              {t("submit.modeLink")}
+            </Button>
+            <Button
+              variant={mode === "upload" ? "primary" : "outline-primary"}
+              onClick={() => setMode("upload")}
+            >
+              {t("submit.modeUpload")}
+            </Button>
+          </ButtonGroup>
+
+          {pendingSharedResult?.already_shared_with_you && (
+            <Alert variant="warning" style={{ maxWidth: "32rem" }}>
+              <p className="mb-2">{t("sharedWithMe.alreadySharedWarning")}</p>
+              <div className="d-flex gap-2">
+                <Link
+                  to={`/pattern/${pendingSharedResult.already_shared_with_you}`}
+                  className="btn btn-outline-primary btn-sm"
+                >
+                  {t("submit.viewSharedPattern")}
+                </Link>
+                <Button variant="outline-secondary" size="sm" onClick={handleContinueAnyway}>
+                  {t("submit.continueAnyway")}
+                </Button>
+              </div>
+            </Alert>
+          )}
+
+          {mode === "link" ? (
+            <Form onSubmit={handleSubmit} className="mb-2" style={{ maxWidth: "32rem" }}>
+              <Form.Group className="mb-3" controlId="submit-url">
+                <Form.Label>{t("submit.urlLabel")}</Form.Label>
                 <Form.Control
-                  type="file"
-                  accept=".html,.htm,text/html,.pdf,application/pdf"
-                  onChange={(e) =>
-                    setUploadFile((e.target as HTMLInputElement).files?.[0] ?? null)
-                  }
+                  type="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder={t("submit.urlPlaceholder")}
                   required
                 />
               </Form.Group>
-              {uploadError && <Alert variant="danger">{uploadError}</Alert>}
-              <Button type="submit" variant="outline-primary" disabled={uploadLoading || !uploadFile}>
-                {uploadLoading ? "Processing..." : "Preview from file"}
+              {error && <Alert variant="danger">{error}</Alert>}
+              <Button type="submit" variant="primary" disabled={loading}>
+                {loading ? t("submit.fetching") : t("submit.previewButton")}
               </Button>
             </Form>
-          </Card.Body>
-        </Card>
-      )}
+          ) : (
+            <div className="mb-2" style={{ maxWidth: "32rem" }}>
+              <p className="text-muted">{t("submit.uploadIntro")}</p>
+              <Form onSubmit={handleUploadPreview}>
+                <Form.Group className="mb-3" controlId="submit-upload-url">
+                  <Form.Label>{t("submit.urlLabel")}</Form.Label>
+                  <Form.Control
+                    type="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder={t("submit.urlPlaceholder")}
+                    required
+                  />
+                  <Form.Text>{t("submit.uploadUrlHint")}</Form.Text>
+                </Form.Group>
+                <Form.Group className="mb-3" controlId="submit-upload-file">
+                  <Form.Label>{t("submit.uploadFileLabel")}</Form.Label>
+                  <Form.Control
+                    type="file"
+                    accept=".html,.htm,text/html,.pdf,application/pdf"
+                    onChange={(e) =>
+                      setUploadFile((e.target as HTMLInputElement).files?.[0] ?? null)
+                    }
+                    required
+                  />
+                </Form.Group>
+                {uploadError && <Alert variant="danger">{uploadError}</Alert>}
+                <Button type="submit" variant="primary" disabled={uploadLoading || !uploadFile}>
+                  {uploadLoading ? t("submit.processing") : t("submit.uploadButton")}
+                </Button>
+              </Form>
+            </div>
+          )}
 
-      <p className="text-muted">
-        Already have this pattern saved? Check the <Link to="/community">Community</Link> page
-        first -- Yarnboard avoids storing the same source URL twice.
-      </p>
+          <p className="text-muted">
+            {t("submit.alreadyHaveIntro")} <Link to="/community">{t("submit.communityPage")}</Link>{" "}
+            {t("submit.alreadyHaveTail")}
+          </p>
+        </>
+      )}
     </div>
   );
 }
