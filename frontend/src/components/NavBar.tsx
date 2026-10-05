@@ -1,6 +1,6 @@
 import { Button, Container, Nav, Navbar, NavDropdown } from "react-bootstrap";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import NotificationBell from "./NotificationBell";
 
@@ -8,6 +8,11 @@ export default function NavBar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
+  // The home page is every visitor's first stop, logged in or not (see
+  // HomePage.tsx) -- force the collapsible mobile nav open there instead
+  // of hiding the Community/Login/Sign up links behind a hamburger tap,
+  // since the whole point of that page is to get a new visitor oriented.
+  const isHomePage = useLocation().pathname === "/";
 
   async function handleLogout() {
     await logout();
@@ -25,12 +30,18 @@ export default function NavBar() {
   }
 
   return (
-    <Navbar expand="md" data-bs-theme="dark" className="navbar-eggplant mb-4" collapseOnSelect>
+    <Navbar
+      expand="md"
+      data-bs-theme="dark"
+      className="navbar-eggplant mb-4"
+      collapseOnSelect={!isHomePage}
+      expanded={isHomePage ? true : undefined}
+    >
       <Container>
         <Navbar.Brand as={Link} to="/" className="fw-bold">
           {t("nav.brand")}
         </Navbar.Brand>
-        <Navbar.Toggle aria-controls="main-nav" />
+        {!isHomePage && <Navbar.Toggle aria-controls="main-nav" />}
         <Navbar.Collapse id="main-nav">
           <Nav className="me-auto">
             <Nav.Link as={Link} to="/community">
