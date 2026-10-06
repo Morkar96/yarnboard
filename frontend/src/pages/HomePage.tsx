@@ -1,8 +1,10 @@
 /**
- * Landing page once logged in (see App.tsx's "/" route and LoginPage's
- * post-login navigate) -- a short how-to for the four things there are to
- * do here, each linking straight to the page that does it. Not a feature
- * in itself, just onboarding; nothing here is fetched from the API.
+ * The site's landing page -- first thing any visitor sees at "/",
+ * logged in or not (see App.tsx's "/" route, unguarded on purpose, and
+ * LoginPage's post-login navigate back here). A short how-to for the
+ * four things there are to do here, each linking straight to the page
+ * that does it. Not a feature in itself, just onboarding; nothing here
+ * is fetched from the API.
  */
 import { Card, Col, Row } from "react-bootstrap";
 import { useTranslation } from "react-i18next";
