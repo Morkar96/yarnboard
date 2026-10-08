@@ -34,6 +34,7 @@ scope; see this module's callers for the product decision).
 import base64
 import re
 
+from flask import current_app
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 USER_AGENT = (
@@ -94,7 +95,8 @@ def fetch_chart(share_url: str) -> dict:
                 "Timed out waiting for Stitch Fiddle to load this chart."
             ) from exc
         except Exception as exc:
-            raise StitchFiddleError(f"Could not load {share_url}: {exc}") from exc
+            current_app.logger.error("Could not load Stitch Fiddle chart %s: %s", share_url, exc)
+            raise StitchFiddleError("Stitch Fiddle couldn't load this chart.") from exc
         finally:
             browser.close()
 
@@ -142,9 +144,11 @@ def decode_grid(rows_field: list[str], column_count: int, row_count: int) -> byt
 
     expected = column_count * row_count
     if len(decoded) != expected:
-        raise StitchFiddleError(
-            f"Unexpected chart grid size (got {len(decoded)} cells, expected {expected})."
+        current_app.logger.error(
+            "Unexpected Stitch Fiddle chart grid size (got %d cells, expected %d).",
+            len(decoded), expected,
         )
+        raise StitchFiddleError("Stitch Fiddle couldn't load this chart.")
     return decoded
 
 

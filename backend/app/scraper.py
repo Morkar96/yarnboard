@@ -20,6 +20,7 @@ from urllib.parse import unquote, urljoin, urlparse
 
 import pdfplumber
 from bs4 import BeautifulSoup
+from flask import current_app
 
 from playwright.sync_api import (
     Page,
@@ -213,7 +214,10 @@ def parse_pattern_pdf(pdf_bytes: bytes, source_url: str) -> dict:
                     if bold_ratio >= PDF_BOLD_LINE_RATIO:
                         label_texts.add(text)
     except Exception as exc:
-        raise ScraperError(f"Could not read this PDF: {exc}") from exc
+        current_app.logger.error("Could not read uploaded PDF: %s", exc)
+        raise ScraperError(
+            "That PDF couldn't be read. Try a different file, or use the URL option instead."
+        ) from exc
 
     if metadata_title and metadata_title.strip():
         title = _strip_site_name_suffix(metadata_title.strip())
@@ -365,7 +369,11 @@ def _fetch_html(url: str, *, allow_file: bool = False) -> str:
         except PlaywrightTimeoutError as exc:
             raise ScraperError(f"Timed out trying to fetch {url}") from exc
         except Exception as exc:
-            raise ScraperError(f"Could not fetch {url} with Playwright: {exc}") from exc
+            current_app.logger.error("Could not fetch %s: %s", url, exc)
+            raise ScraperError(
+                f"{url} couldn't be fetched. The site may be blocking automated access "
+                "or temporarily unavailable."
+            ) from exc
         finally:
             browser.close()
 

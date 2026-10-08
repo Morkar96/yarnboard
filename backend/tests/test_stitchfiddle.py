@@ -58,8 +58,11 @@ def test_decode_grid_matches_column_times_row_count():
     assert set(grid) <= set(range(len(CHART["palette"]["styles"])))
 
 
-def test_decode_grid_rejects_mismatched_size():
-    with pytest.raises(StitchFiddleError):
+def test_decode_grid_rejects_mismatched_size(app):
+    # decode_grid logs the real cell counts via current_app.logger before
+    # raising the generic, user-facing message (see stitchfiddle.py) --
+    # needs a real app context, unlike every other test in this file.
+    with app.app_context(), pytest.raises(StitchFiddleError):
         decode_grid(CHART["grid"]["rows"], SIZE["columnCount"] + 1, SIZE["rowCount"])
 
 

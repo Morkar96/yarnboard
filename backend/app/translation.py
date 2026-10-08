@@ -28,6 +28,15 @@ import time
 from pathlib import Path
 
 import requests
+from flask import current_app
+
+# Shown to the end user for every non-actionable translation failure below
+# (missing/invalid config, a malformed upstream response, a retry-exhausted
+# request) -- deliberately generic and free of internal names (env var
+# names, the glossary filename, the upstream provider) so nothing about
+# how this is implemented leaks into the UI. The real detail always goes
+# to current_app.logger instead, for anyone actually debugging this.
+_GENERIC_TRANSLATION_FAILURE = "Translation isn't available right now. Please try again later."
 
 # Hand-maintained corrections, e.g. {"dc": "עמוד כפול"} -- edit this file
 # directly (English term -> exact Hebrew translation) whenever a reviewer
@@ -131,11 +140,13 @@ def _load_glossary() -> dict[str, str]:
         with GLOSSARY_PATH.open(encoding="utf-8") as f:
             glossary = json.load(f)
     except (OSError, ValueError) as exc:
-        raise TranslationError(f"translation_glossary.json is invalid: {exc}") from exc
+        current_app.logger.error("translation_glossary.json is invalid: %s", exc)
+        raise TranslationError(_GENERIC_TRANSLATION_FAILURE) from exc
     if not isinstance(glossary, dict) or not all(
         isinstance(k, str) and isinstance(v, str) for k, v in glossary.items()
     ):
-        raise TranslationError("translation_glossary.json must be a flat object of string: string")
+        current_app.logger.error("translation_glossary.json must be a flat object of string: string")
+        raise TranslationError(_GENERIC_TRANSLATION_FAILURE)
     return glossary
 
 
@@ -161,9 +172,8 @@ def _call_gemini(prompt: str) -> dict:
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise TranslationError(
-            "GEMINI_API_KEY is not set -- cannot translate. See README for setup."
-        )
+        current_app.logger.error("GEMINI_API_KEY is not set -- cannot translate.")
+        raise TranslationError(_GENERIC_TRANSLATION_FAILURE)
 
     url = GEMINI_API_URL_TEMPLATE.format(model=GEMINI_MODEL)
     response = None
@@ -189,16 +199,18 @@ def _call_gemini(prompt: str) -> dict:
             # budget on something that can't change.
             is_client_error = exc.response is not None and 400 <= exc.response.status_code < 500
             if is_client_error or attempt == MAX_RETRIES:
-                raise TranslationError(
-                    f"Gemini API request failed: {str(exc).replace(api_key, '<redacted>')}"
-                ) from exc
+                current_app.logger.error(
+                    "Gemini API request failed: %s", str(exc).replace(api_key, "<redacted>")
+                )
+                raise TranslationError(_GENERIC_TRANSLATION_FAILURE) from exc
             time.sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
 
     try:
         raw_text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
         return json.loads(raw_text)
     except (KeyError, IndexError, ValueError) as exc:
-        raise TranslationError(f"Gemini returned an unexpected response shape: {exc}") from exc
+        current_app.logger.error("Gemini returned an unexpected response shape: %s", exc)
+        raise TranslationError(_GENERIC_TRANSLATION_FAILURE) from exc
 
 
 def _build_translated_instructions(
@@ -219,19 +231,21 @@ def _build_translated_instructions(
     call is populating.
     """
     if len(translated_parts) != len(parts):
-        raise TranslationError(
-            f"Translation returned {len(translated_parts)} instruction parts, "
-            f"expected {len(parts)}."
+        current_app.logger.error(
+            "Translation returned %d instruction parts, expected %d.",
+            len(translated_parts), len(parts),
         )
+        raise TranslationError(_GENERIC_TRANSLATION_FAILURE)
 
     result = {}
     for (part_name, steps), translated_part in zip(parts, translated_parts):
         translated_steps = translated_part.get("steps") or []
         if len(translated_steps) != len(steps):
-            raise TranslationError(
-                f"Translation returned {len(translated_steps)} steps for "
-                f"'{part_name}', expected {len(steps)}."
+            current_app.logger.error(
+                "Translation returned %d steps for '%s', expected %d.",
+                len(translated_steps), part_name, len(steps),
             )
+            raise TranslationError(_GENERIC_TRANSLATION_FAILURE)
         result[part_name] = {
             f"heading_{field_suffix}": translated_part.get("heading") or part_name,
             f"steps_{field_suffix}": translated_steps,
@@ -272,7 +286,8 @@ def translate_pattern_to_hebrew(
     try:
         translated_parts = translated["instructions"]
     except KeyError as exc:
-        raise TranslationError(f"Gemini returned an unexpected response shape: {exc}") from exc
+        current_app.logger.error("Gemini returned an unexpected response shape: %s", exc)
+        raise TranslationError(_GENERIC_TRANSLATION_FAILURE) from exc
 
     instructions_he = _build_translated_instructions(parts, translated_parts, "he")
     return (
@@ -314,7 +329,8 @@ def translate_pattern_to_english(
     try:
         translated_parts = translated["instructions"]
     except KeyError as exc:
-        raise TranslationError(f"Gemini returned an unexpected response shape: {exc}") from exc
+        current_app.logger.error("Gemini returned an unexpected response shape: %s", exc)
+        raise TranslationError(_GENERIC_TRANSLATION_FAILURE) from exc
 
     instructions_en = _build_translated_instructions(parts, translated_parts, "en")
     return (

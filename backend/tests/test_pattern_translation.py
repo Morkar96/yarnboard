@@ -321,21 +321,25 @@ def test_missing_glossary_file_produces_no_glossary_section(monkeypatch, tmp_pat
     assert translation._build_glossary_section({}) == ""
 
 
-def test_invalid_glossary_file_raises_translation_error(monkeypatch, tmp_path):
+def test_invalid_glossary_file_raises_translation_error(app, monkeypatch, tmp_path):
     glossary_path = tmp_path / "glossary.json"
     glossary_path.write_text("not valid json", encoding="utf-8")
     monkeypatch.setattr(translation, "GLOSSARY_PATH", glossary_path)
 
-    with pytest.raises(translation.TranslationError):
+    # _load_glossary logs the real detail via current_app.logger (see
+    # translation.py) before raising the generic, user-facing message --
+    # needs a real app context to do that, unlike calling through the
+    # client fixture elsewhere in this file.
+    with app.app_context(), pytest.raises(translation.TranslationError):
         translation._load_glossary()
 
 
-def test_glossary_file_must_be_a_flat_string_to_string_object(monkeypatch, tmp_path):
+def test_glossary_file_must_be_a_flat_string_to_string_object(app, monkeypatch, tmp_path):
     glossary_path = tmp_path / "glossary.json"
     glossary_path.write_text(json.dumps({"dc": ["not", "a", "string"]}), encoding="utf-8")
     monkeypatch.setattr(translation, "GLOSSARY_PATH", glossary_path)
 
-    with pytest.raises(translation.TranslationError):
+    with app.app_context(), pytest.raises(translation.TranslationError):
         translation._load_glossary()
 
 
@@ -367,7 +371,7 @@ def test_translation_retries_on_transient_server_error_then_succeeds(monkeypatch
     assert calls["count"] == 3  # failed twice, succeeded on the 3rd attempt
 
 
-def test_translation_gives_up_after_max_retries(monkeypatch):
+def test_translation_gives_up_after_max_retries(app, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(translation, "RETRY_BACKOFF_SECONDS", 0)
     calls = {"count": 0}
@@ -378,13 +382,16 @@ def test_translation_gives_up_after_max_retries(monkeypatch):
 
     monkeypatch.setattr(translation.requests, "post", fake_post)
 
-    with pytest.raises(translation.TranslationError):
+    # Logs the real detail via current_app.logger before raising the
+    # generic, user-facing message (see translation.py) -- needs a real
+    # app context, unlike the success-path test above.
+    with app.app_context(), pytest.raises(translation.TranslationError):
         translation.translate_pattern_to_hebrew("Title", "Materials", "k: knit", INSTRUCTIONS)
 
     assert calls["count"] == translation.MAX_RETRIES + 1
 
 
-def test_translation_does_not_retry_a_client_error(monkeypatch):
+def test_translation_does_not_retry_a_client_error(app, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(translation, "RETRY_BACKOFF_SECONDS", 0)
     calls = {"count": 0}
@@ -395,7 +402,7 @@ def test_translation_does_not_retry_a_client_error(monkeypatch):
 
     monkeypatch.setattr(translation.requests, "post", fake_post)
 
-    with pytest.raises(translation.TranslationError):
+    with app.app_context(), pytest.raises(translation.TranslationError):
         translation.translate_pattern_to_hebrew("Title", "Materials", "k: knit", INSTRUCTIONS)
 
     assert calls["count"] == 1  # no retries for a 4xx
