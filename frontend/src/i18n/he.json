@@ -4,6 +4,9 @@
     "unknown": "לא ידוע",
     "or": "או"
   },
+  "footer": {
+    "buyMeACoffee": "קנו לי קפה"
+  },
   "nav": {
     "brand": "Yarnboard",
     "community": "קהילה",

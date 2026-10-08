@@ -4,6 +4,9 @@
     "unknown": "Unknown",
     "or": "or"
   },
+  "footer": {
+    "buyMeACoffee": "Buy me a coffee"
+  },
   "nav": {
     "brand": "Yarnboard",
     "community": "Community",

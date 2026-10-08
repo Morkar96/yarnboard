@@ -1,5 +1,6 @@
 import { Container } from "react-bootstrap";
 import { Route, Routes } from "react-router-dom";
+import Footer from "./components/Footer";
 import NavBar from "./components/NavBar";
 import ProtectedRoute from "./components/ProtectedRoute";
 import UpdateBanner from "./components/UpdateBanner";
@@ -90,6 +91,7 @@ export default function App() {
           />
         </Routes>
       </Container>
+      <Footer />
     </>
   );
 }
