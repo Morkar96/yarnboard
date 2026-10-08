@@ -17,6 +17,7 @@ import ReviewPatternPage from "./pages/ReviewPatternPage";
 import SharedWithMePage from "./pages/SharedWithMePage";
 import StitchFiddlePage from "./pages/StitchFiddlePage";
 import SubmitPatternPage from "./pages/SubmitPatternPage";
+import TermsPage from "./pages/TermsPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/community" element={<CommunityPage />} />
+          <Route path="/terms" element={<TermsPage />} />
           <Route path="/pattern/:id" element={<PatternDetailPage />} />
           <Route
             path="/pattern/:id/edit"

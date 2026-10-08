@@ -5,7 +5,8 @@
     "or": "or"
   },
   "footer": {
-    "buyMeACoffee": "Buy me a coffee"
+    "buyMeACoffee": "Buy me a coffee",
+    "terms": "Terms of Use"
   },
   "nav": {
     "brand": "Yarnboard",
