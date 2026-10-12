@@ -1,0 +1,8 @@
+# User-agent: → who the rule is for
+# Disallow: → ❓
+# Allow: → ❓
+# Sitemap: → ❓ (do you have a sitemap? 🤔)
+User-agent: *
+Disallow: /api
+Disallow: /login
+Disallow: /register
